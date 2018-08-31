@@ -1,6 +1,6 @@
 
 
-function [hPlot] = plot_blobs(ax,A,offset,thr,ROI_line,ROI_color,ROI_thickness,hwait)
+function [hPlot] = cluster_plot_blobs(ax,A,offset,thr,ROI_line,ROI_color,ROI_thickness,hwait)
   
   %% --- INPUTS ---
   %% ax		- axis to plot to
@@ -12,7 +12,6 @@ function [hPlot] = plot_blobs(ax,A,offset,thr,ROI_line,ROI_color,ROI_thickness,h
   
   %% --- OUTPUTS ---
   %% hPlot 	- handles to ROIs
-  
   
   nROI = size(A,3);
   

@@ -22,7 +22,7 @@ function varargout = ROI_matching(varargin)
 
 % Edit the above text to modify the response to help ROI_matching
 
-% Last Modified by GUIDE v2.5 30-Aug-2018 15:31:59
+% Last Modified by GUIDE v2.5 31-Aug-2018 16:57:27
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -130,139 +130,46 @@ function button_clustering_Callback(hObject, eventdata, h)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
   
+    
   disp('ROI_clustering...')
   
   appdata = get(0,'ApplicationData');
+%    if ~isfield(appdata,'clusters')
+  pre_clustering(h);
+%    end
   
-  if ~isfield(appdata,'clusters')
-    xdata = getappdata(0,'xdata');
-    
-    registered = struct('session',struct);
-    clusters = struct('A',[],'ID',[],'score',[]);
-    
-    for s = 1:h.data.nSes
-      registered.session(s).neuron = false(h.data.session(s).nROI,1);
-      
-      h.status.session(s).visible = true(h.data.session(s).nROI,1);
-      h.status.session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1),'matched',cell(h.data.session(s).nROI,1));
-    end
-    
-    nCluster = 0;
-    
-    tic
-    for s = 1:h.data.nSes
-      for sm = 1:h.data.nSes
-        
-        for n = 1:h.data.session(s).nROI
-          if sm == s
-            continue
-          end
-          
-          if ~registered.session(s).neuron(n)   %% add new ROI_cluster if not already belonging to one
-            nCluster = nCluster + 1;
-            clusters(nCluster).session = struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[]));
-            h.data.clusters(nCluster).session = struct('list',cell(h.data.nSes,1));
-            
-            clusters(nCluster).ID = nCluster;
-            h.status.session(s).ROI(n).cluster_ID = nCluster;
-            
-            clusters(nCluster).session(s).list = n;
-            h.data.clusters(nCluster).session(s).list = n;
-            registered.session(s).neuron(n) = true;
-          end
-          
-          
-          ID_n = h.status.session(s).ROI(n).cluster_ID;
-          
-          match_candidates = find(xdata(s,sm).prob(n,:)>0.5);    %% all ROIs in sm that are candidates to be same as ROI (s,n)
-          for m = match_candidates
-            
-            if ~registered.session(sm).neuron(m)
-              
-              h.status.session(sm).ROI(m).cluster_ID = ID_n;
-              for c = ID_n
-                idx = length(clusters(c).session(sm).list)+1;
-                clusters(c).session(sm).list(idx) = m;
-                h.data.clusters(c).session(sm).list(idx) = m;
-              end
-              registered.session(sm).neuron(m) = true;
-                
-            elseif registered.session(sm).neuron(m)% && ~all(ismember(h.status.session(sm).ROI(m).cluster_ID,ID_n))
-              fill_IDs = setdiff(ID_n,h.status.session(sm).ROI(m).cluster_ID);
-              for c = fill_IDs
-                idx = length(h.status.session(sm).ROI(m).cluster_ID) + 1;
-                h.status.session(sm).ROI(m).cluster_ID(idx) = c;
-                
-                idx = length(clusters(c).session(sm).list)+1;
-                clusters(c).session(sm).list(idx) = m;
-                h.data.clusters(c).session(sm).list(idx) = m;
-              end
-              
-              fill_IDs = setdiff(h.status.session(sm).ROI(m).cluster_ID,ID_n);
-              for c = fill_IDs
-                idx = length(h.status.session(s).ROI(n).cluster_ID) + 1;
-                h.status.session(s).ROI(n).cluster_ID(idx) = c;
-                
-                idx = length(clusters(c).session(s).list)+1;
-                clusters(c).session(s).list(idx) = n;
-                h.data.clusters(c).session(s).list(idx) = n;
-              end
-            end
-          end
-        end
-      end
-    end
-    toc
-    tic
-    nCluster = 100;
-    
-    %% compute some cluster stats
-    for c = 1:nCluster
-      h = update_cluster_occupancy(h,c);
-      h = update_cluster_status(h,c);
-      [h, clusters(c)] = update_cluster_stats(h,xdata,clusters(c),c);
-    end
-  %    [clusters,data] = cell_matching(data,xdata,clusters,0.95);
-    setappdata(0,'clusters',clusters)
-    update_cluster_shape(h,1:nCluster)
-    setappdata(0,'handle',h)
-    toc
-  else
-    h_tmp = getappdata(0,'handle');
-    h.status = h_tmp.status;
-    h.data.clusters = h_tmp.data.clusters;
-    
-    clusters = getappdata(0,'clusters');
-    xdata = getappdata(0,'xdata');
-    nCluster = 100;
-    
-    for c = 1:nCluster
-      h = update_cluster_occupancy(h,c);
-      h = update_cluster_status(h,c);
-      [h, clusters(c)] = update_cluster_stats(h,xdata,clusters(c),c);
-    end
-  %    [clusters,data] = cell_matching(data,xdata,clusters,0.95);
-    setappdata(0,'clusters',clusters)
-    update_cluster_shape(h,1:nCluster)
-  end
-  
-  nCluster = 100;
-  h.data.nCluster = nCluster;
-  
+  xdata = getappdata(0,'xdata');
   clusters = getappdata(0,'clusters');
+  
+  h = cluster2handle(h,clusters);
+  
+  nCluster = length(clusters);
+  h.data.nCluster = nCluster;
   
   h.plots.cluster = struct('thickness',cell(nCluster,1),'color',cell(nCluster,1));
   
   h.data.cluster_ct = zeros(h.data.nCluster,1);
   h.data.cluster_score = zeros(h.data.nCluster,1);
+  h.data.cluster_centroids = zeros(h.data.nCluster,2);
   
   h.status.active = true(h.data.nCluster,1);
   h.status.completed = false(h.data.nCluster,1);
   h.status.cluster_multiROI = false(h.data.nCluster,1);
   h.status.cluster_polyROI = false(h.data.nCluster,1);
   h.status.cluster_occupancy = zeros(h.data.nCluster,1);
-
-  h.data.cluster_centroids = cat(1,clusters.centroid);
+  
+  h.data.nCluster = nCluster;
+  
+  for c = 1:nCluster
+    h = update_cluster_occupancy(h,c);
+    h = update_cluster_status(h,c);
+    [h, clusters(c)] = update_cluster_stats(h,xdata,clusters(c),c);
+  end
+  setappdata(0,'clusters',clusters)
+  update_cluster_shape(h,1:nCluster)
+  clusters = getappdata(0,'clusters');
+  
+  h.data.cluster_centroids(1:nCluster,:) = cat(1,clusters.centroid);
 
   for s = 1:h.data.nSes
     h.status.session(s).visible = true;
@@ -286,10 +193,10 @@ function button_clustering_Callback(hObject, eventdata, h)
   %%% initial plotting of all clusters
   disp('plotting')
   for c = 1:nCluster
-    h.plots.cluster_handles(c) = plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-',h.plots.clusters(c).color,h.plots.clusters(c).thickness);
+    h.plots.cluster_handles(c) = cluster_plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-',h.plots.clusters(c).color,h.plots.clusters(c).thickness);
   end
   
-  h.plots.cluster_textbox = annotation('textbox',[0.3 0.963 0.06 0.035],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
+  h.plots.cluster_textbox = annotation('textbox',[0.47 0.963 0.06 0.035],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
   h.plots.ROI_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
   h.plots.clusterstats_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
   
@@ -308,22 +215,418 @@ function button_clustering_Callback(hObject, eventdata, h)
   
   
   %% plot overall stats
-  h.plots.histo_ct = histogram(h.ax_matchstats,h.data.cluster_ct);
+  h.plots.histo_ct = histogram(h.ax_matchstats,h.data.cluster_ct(1:h.data.nCluster));
   xlim(h.ax_matchstats,[0,16])
   xlabel(h.ax_matchstats,'# Sessions')
   ylabel(h.ax_matchstats,'# clusters')
   
-  h.plots.histo_score = histogram(h.ax_matchstats2,h.data.cluster_score,linspace(0,1,21));
+  h.plots.histo_score = histogram(h.ax_matchstats2,h.data.cluster_score(1:h.data.nCluster),linspace(0,1,21));
   xlim(h.ax_matchstats2,[0,1])
   xlabel(h.ax_matchstats2,'score')
   ylabel(h.ax_matchstats2,'# clusters')
   
   guidata(hObject, h);
+  
+  
+
+function pre_clustering(h)
+  
+  appdata = get(0,'ApplicationData');
+  
+  if ~isfield(appdata,'pre_clusters')
+  
+    xdata = getappdata(0,'xdata');
+    
+    registered = struct('session',struct);
+    clusters = struct('A',[],'ID',[],'score',[]);
+    
+    session = struct;
+    for s = 1:h.data.nSes
+      registered.session(s).neuron = false(h.data.session(s).nROI,1);
+      session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1),'matched',cell(h.data.session(s).nROI,1));
+    end
+    
+    nCluster = 0;
+    
+    tic
+    for s = 1:h.data.nSes
+      for sm = 1:h.data.nSes
+        
+        for n = 1:h.data.session(s).nROI
+          if sm == s
+            session(s).ROI(n).matched = false;
+            continue
+          end
+          
+          if ~registered.session(s).neuron(n)   %% add new ROI_cluster if not already belonging to one
+            nCluster = nCluster + 1;
+            clusters(nCluster).session = struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[]));
+            
+            clusters(nCluster).ID = nCluster;
+            session(s).ROI(n).cluster_ID = nCluster;
+            
+            clusters(nCluster).session(s).list = n;
+            registered.session(s).neuron(n) = true;
+          end
+          
+          
+          ID_n = session(s).ROI(n).cluster_ID;
+          
+          match_candidates = find(xdata(s,sm).prob(n,:)>0.5);    %% all ROIs in sm that are candidates to be same as ROI (s,n)
+          for m = match_candidates
+            
+            if ~registered.session(sm).neuron(m)
+              
+              session(sm).ROI(m).cluster_ID = ID_n;
+              for c = ID_n
+                idx = length(clusters(c).session(sm).list)+1;
+                clusters(c).session(sm).list(idx) = m;
+              end
+              registered.session(sm).neuron(m) = true;
+                
+            elseif registered.session(sm).neuron(m)
+              fill_IDs = setdiff(ID_n,session(sm).ROI(m).cluster_ID);
+              for c = fill_IDs
+                idx = length(session(sm).ROI(m).cluster_ID) + 1;
+                session(sm).ROI(m).cluster_ID(idx) = c;
+                
+                idx = length(clusters(c).session(sm).list)+1;
+                clusters(c).session(sm).list(idx) = m;
+              end
+              
+              fill_IDs = setdiff(session(sm).ROI(m).cluster_ID,ID_n);
+              for c = fill_IDs
+                idx = length(session(s).ROI(n).cluster_ID) + 1;
+                session(s).ROI(n).cluster_ID(idx) = c;
+                
+                idx = length(clusters(c).session(s).list)+1;
+                clusters(c).session(s).list(idx) = n;
+              end
+            end
+          end
+        end
+      end
+    end
+    toc
+    setappdata(0,'pre_clusters',clusters)
+    setappdata(0,'session',session)
+  end
+  
+  tic
+  session = getappdata(0,'session');
+  real_matching(h,session,0.8);
+  toc
+  
+  
+  
+  
+  
+function real_matching(h,session,p_thr)
+  
+%    nSes = size(pre_clusters(1).list,1);
+  
+  pre_clusters = getappdata(0,'pre_clusters');
+  
+  xdata = getappdata(0,'xdata');
+  mode = 'threshold';
+%      mode = 'other';
+  
+  %% now, go through all clusters and assign surely matching ROIs to each other (p_same>0.95)
+  %%% here, implementing footprints in the matching process should help/improve the results quite a bit
+  
+  %% afterwards, check chance of others belonging to the same cluster or whether chance is larger of them to form an own cluster
+  %% for ROIs in same session, check whether merging improves matching probability
+  %% also, remove surely matched ROIs in one cluster from others (or rather, track, which ones are matched already
+  tic
+%    merge_ct = 0;
+%    merge2_ct = 0;
+%    merge_ct_real = 0;
+  c = 1;
+  c_final = 0;
+%    change_ct = 0;
+%    switch_ct = 0;
+%    A_thr = 400;
+  
+  nCluster = length(pre_clusters);
+  
+  disp('registering')
+  while c < length(pre_clusters)
+  
+    if mod(c,100)==0
+      disp(sprintf('%d of %d done. (originally %d)',c,length(pre_clusters),nCluster))
+    end
+    
+    %% remove already matched ROIs from pre_clusters
+    pre_occupancy = zeros(h.data.nSes,1);
+    for s = 1:h.data.nSes
+      for n = pre_clusters(c).session(s).list
+        if session(s).ROI(n).matched
+          idx = find(pre_clusters(c).session(s).list==n);
+          pre_clusters(c).session(s).list(idx) = [];
+        end
+      end
+      pre_occupancy(s) = length(pre_clusters(c).session(s).list);
+    end
+    
+    if nnz(pre_occupancy) < 2   %% only look at pre_clusterss, that actually have some matching possibilities
+      pre_clusters(c) = [];
+    else
+      c_final = c_final + 1;
+      n_ref = 0;
+      s_ref = 0;
+      
+      %% merge status: for every neuron in the final_list, have 3 entries: previous, current and following session match status
+      %% match status does not refer to matching to a certain neuron, but rather assigning to this pre_clusters!
+      post_clusters(c_final).session = struct('list',cell(h.data.nSes,1));
+      post_clusters(c_final).score = NaN;
+            
+      for s = 1:h.data.nSes
+      
+        if length(pre_clusters(c).session(s).list)
+          
+          %% compare to last registered neuron (closest in time)
+          %% also, compare to other ones if no fit found (or to overall pre_clusters?)
+          
+          if n_ref == 0   %% register new ROI as reference ROI
+            %%% missing here: no merging in first session possible
+            n = pre_clusters(c).session(s).list(1);
+            post_clusters(c_final).session(s).list = n;
+            
+            %% set reference to first ROI detected
+            n_ref = n;
+            s_ref = s;
+          else
+            
+            if strcmp(mode,'threshold')
+              [matches_s, p_same_s] = get_matches(pre_clusters(c).session(s).list,xdata,0.05,s_ref,n_ref,s);
+              
+              [p_best_s,idx_s] = max(p_same_s);
+              if p_best_s > p_thr
+                best_match_s = matches_s(idx_s);
+                
+                %% check for reciprocity
+                [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c).session(s_ref).list,xdata,0.05,s,best_match_s,s_ref);
+                [p_best_s_ref,idx_s_ref] = max(p_same_s_ref);
+                if (matches_s_ref(idx_s_ref) == n_ref) && (p_best_s_ref > p_thr)
+                  post_clusters(c_final).session(s).list = best_match_s;
+                end
+              end
+            
+%                if length(post_clusters(c_final).session(s).list)
+%                  %% allow more than one neuron to go here
+%                  n_ref = best_match_s;   %% this should include merging possibilities
+%                  s_ref = s;
+%                end
+            %% matching due to most probable ROI (including merging etc)
+            else
+              
+              %% check for matches with first detected ROI
+              %% also, check for matches with most recently detected ROI
+              [matches_s, p_same_s] = get_matches(pre_clusters(c),xdata,0.05,s_ref,n_ref,s);
+              [~,idx_s] = max(p_same_s);
+              best_match_s = matches_s(idx_s);
+              
+              for i=1:length(matches_s)
+              %%% should only first best match (matches_s_ref) be considered? or also 2nd best?
+                [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c),xdata,0.05,s,matches_s(i),s_ref);
+                [~,idx_s_ref] = max(p_same_s_ref);
+                
+                if matches_s(i) == best_match_s && matches_s_ref(idx_s_ref) == n_ref    %% if they are each others favorites
+                  %% additionally check, whether this probability is larger than ... something?!
+                  if p_same_s_ref(idx_s_ref) > 0.05
+                    post_clusters(c_final).match_status(s_ref,3) = true;
+                    post_clusters(c_final).match_status(s,1) = true;
+                    
+                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+                      post_clusters(c_final).list(s,idx) = matches_s(i);
+                    end
+                  end
+                  
+                elseif matches_s(i) == best_match_s                 %% if chosen ROI rather matches with another one
+                %% do not match!! (or rather: how much different are they? look for merging possibility?)
+                %%% here, should check for 2nd best match
+                  if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% really wants to match another one -> do not include in this pre_clusters (very rare)
+                    change_ct = change_ct + 1;
+                  else                                           %% if there might be a chance of both matching -> merge?
+                    post_clusters(c_final).match_status(s_ref,2:3) = true;
+                    post_clusters(c_final).match_status(s,1) = true;
+                    merge_ct = merge_ct + 1;
+                    if ~ismember(matches_s_ref(idx_s_ref),post_clusters(c_final).list(s_ref,:))
+                      idx = nnz(post_clusters(c_final).list(s_ref,:)) + 1;
+                      post_clusters(c_final).list(s_ref,idx) = matches_s_ref(idx_s_ref);
+                    end
+                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+                      post_clusters(c_final).list(s,idx) = matches_s(i);
+                    end
+                  end
+                  
+                elseif matches_s_ref(idx_s_ref) == n_ref
+                  if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% if probabilities far exceed, change match
+                    post_clusters(c_final).match_status(s_ref,3) = true;
+%                        post_clusters(c_final).list(s,:) = 0;
+                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+                      post_clusters(c_final).list(s,idx) = matches_s(i);
+                      post_clusters(c_final).match_status(s,1) = true;
+                    end
+                    switch_ct = switch_ct + 1;
+                  else
+                    
+                    merge2_ct = merge2_ct + 1;
+                    post_clusters(c_final).match_status(s,2) = true;
+                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+                      post_clusters(c_final).list(s,idx) = matches_s(i);
+                    end
+                  end
+                  best_match_s = matches_s(i);
+                end
+                
+              end
+              
+              if any(post_clusters(c_final).list(s,:))
+                %% allow more than one neuron to go here
+                n_ref_alt = best_match_s;   %% this should include merging possibilities
+                s_ref_alt = s;
+              end
+            end
+          end
+        end
+      end
+      
+%        %% obtain and calculate values for ROI score
+%        score = prepare_ROI_score(post_clusters(c_final),ROI_data,xdata);
+%        
+%        post_clusters(c_final) = ROI_cleanup(post_clusters(c_final),score,c_final,ROI_data);
+%        post_clusters(c_final).score = get_ROI_score(post_clusters(c_final),score,0);
+%        
+%        %%% filling gaps in ROI cluster should be done in other function for all ROIs > certain score and ct
+%        %%% it should...
+%        %%% 1. crop out region that encloses all ROIs from this cluster + some margin
+%        %%% 2. find all closeby ROIs (also from other clusters)
+%        %%%   2.1. check if there is a single ROI, that might have been sorted out but belongs to this cluster- if so, remove!
+%        %%% 3. initiate CNMF with initial guess of closeby ROIs + region covered by this cluster (+ some margin)
+%        %%% 4. if new ROI is found, implement this one + its Ca-trace in data
+%        %%%   4.1 if no new ROI is found, remark this one as "non-active" (or just apply average ROI from neighbouring sessions and get Ca-trace from simple filter application (- background) - check, if active or not)
+%        
+%        
+%        %% here, implement checking for ROI score and removing/merging/splitting accordingly
+%        
+%        %% score: high average and minimum probability, bias towards large number of neurons in one pre_clusters
+%        %% check: removing one ROI from pre_clusters: does it increase or decrease the "score"?
+%        %% or: possible to create subset from pre_clusters that has high average and minimum probability?
+%        
+%        %% only now, after removing "substandard matches" from the pre_clusters, assign "matched" status to all
+%          
+      %% assign matched status to all within pre_clusters
+      occupancy = zeros(h.data.nSes,1);
+      for s = 1:h.data.nSes
+        for i = 1:length(post_clusters(c_final).session(s).list)
+          n = post_clusters(c_final).session(s).list(i);
+          session(s).ROI(n).matched = true;
+        end
+        occupancy(s) = length(post_clusters(c_final).session(s).list);
+      end
+      
+      post_clusters(c_final).ct = nnz(occupancy);
+      if post_clusters(c_final).ct < 2
+        post_clusters(c_final) = [];
+        c_final = c_final - 1;
+      elseif ~all(pre_occupancy==occupancy) %% in the end, create new pre_clusters from remaining ROIs and append to pre_clusters struct
+      
+        c_idx = length(pre_clusters)+1;
+        pre_clusters(c_idx).session = struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[]));
+        pre_clusters(c_idx).ID = c_idx;
+        
+        for s = 1:h.data.nSes
+          pre_clusters(c_idx).session(s).list = setdiff(pre_clusters(c).session(s).list,post_clusters(c_final).session(s).list);
+          if isempty(pre_clusters(c_idx).session(s).list)
+            pre_clusters(c_idx).session(s).list = [];
+          end
+          occupancy(s) = length(pre_clusters(c_idx).session(s).list);
+        end
+        
+        if nnz(occupancy) < 2
+          pre_clusters(c_idx) = [];
+        end
+      end
+      
+      c = c+1;
+    end
+  end
+  
+%    %%% fill up cluster_neuron arrays to cover all clusters
+%    for s = 1:nSes
+%      if length(ROI_data(s).cluster_neuron) < c_final
+%        session(s).cluster_neuron(c_final) = 0;
+%      end
+%  %        [s length(ROI_data(s).cluster_neuron)]
+%  %        ROI_data(s).cluster_neuron = cat(1,ROI_data(s).cluster_neuron',zeros(c_final - length(ROI_data(s).cluster_neuron),1))
+%      [s size(session(s).cluster_neuron)]
+%    end
+  
+  nMatches = [post_clusters.ct];
+  disp(sprintf('number of ROI_clusters: %d',c_final))
+%    disp(sprintf('merging attempts: %d',merge_ct))
+%    disp(sprintf('real merges to be done: %d',merge_ct_real))
+%  %      disp(sprintf('number of session-matchings: %d',sesmatch))
+%  %      disp(sprintf('polygamous ROIs: %d',polygamy))
+%  %      disp('matching done')
+  toc
+%    fig_ses = figure('position',[100 100 800 400]);
+%    histogram(nMatches)
+%    xlabel('# sessions detected')
+%    ylabel('# matched ROIs')
+  
+%    hist_matches = hist(nMatches);
+%    text(0.6,0.9,sprintf('# stable ROIs (s>=3): %d',sum(hist_matches(3:end))),'units','normalized','FontSize',14)
+  
+  setappdata(0,'clusters',post_clusters)
+  
+
+
+function [n, p_same] = get_matches(n,xdata,p_thr,s_ref,n_ref,s)
+  
+  %% search for all ROIs, that are not certainly rejected due to footprint or distance
+  p_same = full(xdata(s_ref,s).prob(n_ref,n));
+  
+  mask = p_same>p_thr;
+  n = n(mask);
+  p_same = p_same(mask);
+  
+  
+  
+  
+  
+  
+  
+
+function h = cluster2handle(h,clusters)
+  
+  for s = 1:h.data.nSes
+    h.status.session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1));
+  end
+  
+  h.data.nCluster = length(clusters);
+  for c = 1:h.data.nCluster
+    h.data.clusters(c).session = struct('list',cell(h.data.nSes,1));
+    
+    for s = 1:h.data.nSes
+      h.data.clusters(c).session(s).list = clusters(c).session(s).list;
+      
+      for n = h.data.clusters(c).session(s).list
+        h.status.session(s).ROI(n).cluster_ID = [h.status.session(s).ROI(n).cluster_ID c];
+      end
+    end
+  end
+
 
 
 function update_matchstats(h)
-  set(h.plots.histo_ct,'Data',h.data.cluster_ct)
-  set(h.plots.histo_score,'Data',h.data.cluster_score)
+  set(h.plots.histo_ct,'Data',h.data.cluster_ct(1:h.data.nCluster))
+  set(h.plots.histo_score,'Data',h.data.cluster_score(1:h.data.nCluster))
   
   
   
@@ -364,11 +667,6 @@ function pickCluster(hObject,eventdata)
   
   clusters = getappdata(0,'clusters');
   coords = get(hObject,'CurrentPoint');
-  
-  h.status.active
-  size(h.status.active)
-  h.data.nCluster
-  size(h.data.cluster_centroids)
   
   [min_val c_idx] = min(sum((h.data.cluster_centroids(h.status.active,1)-coords(1,2)).^2 + (h.data.cluster_centroids(h.status.active,2)-coords(1,1)).^2,2));
   idxes = find(h.status.active);
@@ -436,7 +734,7 @@ function h = plot_cluster(h,c)
         else
           %%% here comes 2D plotting
           col = ones(3,1)*4*s/(5.*h.data.nSes);
-          h.plots.session(s).ROI(i) = plot_blobs(h.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'-',col,1);        
+          h.plots.session(s).ROI(i) = cluster_plot_blobs(h.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'-',col,1);        
         end
         idx = length(h.plots.session(s).ROI_ID)+1;
         h.plots.session(s).ROI_ID(idx) = n;
@@ -465,7 +763,7 @@ function h = plot_cluster(h,c)
             
             h.plots.session(s).ROI(idx) = surf(h.ax_ROI_display,X,Y,-2*A_tmp+s,'FaceAlpha',0.4,'EdgeAlpha',0.4);
           else
-            h.plots.session(s).ROI(idx) = plot_blobs(h.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'--','r',0.75);
+            h.plots.session(s).ROI(idx) = cluster_plot_blobs(h.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'--','r',0.75);
           end
           set(h.plots.session(s).ROI(idx),'ButtonDownFcn',{@click_ROI,[c s n],1},'HitTest','on');
           h.plots.session(s).ROI_ID(idx) = n;
@@ -714,16 +1012,18 @@ function click_ROI(hObject,eventdata,ID,ax_ID)
     h.plots.clusters(c).thickness = h.data.cluster_ct(c)/h.data.nSes * 3;
     
     delete(h.plots.cluster_handles(c))
-    h.plots.cluster_handles(c) = plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-','m',h.plots.clusters(c).thickness);
+    h.plots.cluster_handles(c) = cluster_plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-','m',h.plots.clusters(c).thickness);
     
     update_cluster_textbox(h,c)
-        
+    
+    h.dblclick = tic-2;
 %      and get "assignment conflict" array for filter
+  else
+    h.dblclick = tic;
   end
   
   h = display_ROI_info(h,ax_ID,ID);
   
-  h.dblclick = tic;
   
   guidata(hObject,h)
 
@@ -1011,32 +1311,6 @@ function display_sessions(h)
 
 
 
-function entry_thr_occurence_Callback(hObject, eventdata, h)
-% hObject    handle to entry_thr_occurence (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_thr_occurence as text
-%        str2double(get(hObject,'String')) returns contents of entry_thr_occurence as a double
-  
-%    h.status.active = h.data.cluster_ct >= str2double(get(h.entry_thr_occurence,'String'));
-  
-%    for c = 1:100%h.data.nCluster
-%      if h.status.active(c)
-%        set(h.plots.cluster_handles(c),'Visible','on')
-%      else
-%        set(h.plots.cluster_handles(c),'Visible','off')
-%      end
-%    end
-%    
-%    if ~h.status.active(h.status.picked.cluster)
-%      h.status.picked.cluster = [];
-%    end
-%    
-%    guidata(hObject,h)
-
-
-
 % --- Executes during object creation, after setting all properties.
 function entry_thr_occurence_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to entry_thr_occurence (see GCBO)
@@ -1120,55 +1394,6 @@ function radio_clusterdisplay_3D_Callback(hObject, eventdata, h)
   end
   
   
-function edit4_Callback(hObject, eventdata, handles)
-% hObject    handle to edit4 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of edit4 as text
-%        str2double(get(hObject,'String')) returns contents of edit4 as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function edit4_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to edit4 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in pushbutton5.
-function pushbutton5_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton5 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-% --- Executes on button press in pushbutton6.
-function pushbutton6_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton6 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-% --- Executes on button press in pushbutton7.
-function pushbutton7_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton7 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-% --- Executes on button press in pushbutton8.
-function pushbutton8_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton8 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
 
 % --- Executes on button press in checkbox_checked.
 function checkbox_checked_Callback(hObject, eventdata, handles)
@@ -1658,13 +1883,8 @@ function button_multi_remove_IDs_Callback(hObject, eventdata, h)
 
 function h = clear_ID(h,xdata,c,s,n)
   
-  clusters = getappdata(0,'clusters');
-  c
-  s
-  n
-  h.status.session(s).ROI(n).cluster_ID
-  
-  cluster_IDs = setdiff(h.status.session(s).ROI(n).cluster_ID,c)
+  clusters = getappdata(0,'clusters');  
+  cluster_IDs = setdiff(h.status.session(s).ROI(n).cluster_ID,c);
   
   for c_cl = cluster_IDs
     
@@ -1682,4 +1902,3 @@ function h = clear_ID(h,xdata,c,s,n)
   h = update_cluster_occupancy(h,c);
   
   setappdata(0,'clusters',clusters)
-
