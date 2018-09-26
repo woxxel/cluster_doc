@@ -1,2396 +1,3863 @@
-function varargout = ROI_matching(varargin)
-% ROI_MATCHING MATLAB code for ROI_matching.fig
-%      ROI_MATCHING, by itself, creates a new ROI_MATCHING or raises the existing
-%      singleton*.
-%
-%      H = ROI_MATCHING returns the handle to a new ROI_MATCHING or the handle to
-%      the existing singleton*.
-%
-%      ROI_MATCHING('CALLBACK',hObject,eventData,handles,...) calls the local
-%      function named CALLBACK in ROI_MATCHING.M with the given input arguments.
-%
-%      ROI_MATCHING('Property','Value',...) creates a new ROI_MATCHING or raises the
-%      existing singleton*.  Starting from the left, property value pairs are
-%      applied to the GUI before ROI_matching_OpeningFcn gets called.  An
-%      unrecognized property name or invalid value makes property application
-%      stop.  All inputs are passed to ROI_matching_OpeningFcn via varargin.
-%
-%      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
-%      instance to run (singleton)".
-%
-% See also: GUIDE, GUIDATA, GUIHANDLES
-
-% Edit the above text to modify the response to help ROI_matching
-
-% Last Modified by GUIDE v2.5 05-Sep-2018 12:16:50
-
-% Begin initialization code - DO NOT EDIT
-gui_Singleton = 1;
-gui_State = struct('gui_Name',       mfilename, ...
-                   'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @ROI_matching_OpeningFcn, ...
-                   'gui_OutputFcn',  @ROI_matching_OutputFcn, ...
-                   'gui_LayoutFcn',  [] , ...
-                   'gui_Callback',   []);
-if nargin && ischar(varargin{1})
-    gui_State.gui_Callback = str2func(varargin{1});
-end
-
-if nargout
-    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
-else
-    gui_mainfcn(gui_State, varargin{:});
-end
-% End initialization code - DO NOT EDIT
 
 
-% --- Executes just before ROI_matching is made visible.
-function ROI_matching_OpeningFcn(hObject, eventdata, h, varargin)
-% This function has no output args, see OutputFcn.
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% varargin   command line arguments to ROI_matching (see VARARGIN)
-  
-  
-  %% process input
-  mouse = varargin{1};
-  h.pathMouse = pathcat('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/',sprintf('%d',mouse));
-  
-  %%% set h.data, footprint, xdata
-  appdata = get(0,'ApplicationData');
-  if nargin == 6
-    footprints = varargin{3};
-    h.data = varargin{4};
-    setappdata(0,'footprints',footprints)
-    setappdata(0,'data',h.data)
-  elseif isfield(appdata,'footprints')
-    footprints = getappdata(0,'footprints');
-    h.data = getappdata(0,'data');
-  else
-    if nargin < 5
-      nSes = [];
-    else
-      nSes = varargin{2};
-    end
-    [h.data footprints] = match_loadSessions(h.pathMouse,nSes);
-    setappdata(0,'footprints',footprints)
-    setappdata(0,'data',h.data)
-  end
-  
-  if nargin == 7
-    xdata = varargin{4};
-    setappdata(0,'xdata',xdata)
-  elseif isfield(appdata,'xdata')
-    xdata = getappdata(0,'xdata');
-  else
-    [xdata, histo, para] = match_analyzeData(footprints,h.data.nSes,12);      %% calculate distances and footprint correlation
-    [model,histo] = match_buildModel(xdata,histo,para,h.data.nSes,h.pathMouse);
-  %    [ROC] = estimate_model_accuracy(histo,model,para,pathMouse);
+classdef ROI_matching < handle
+  properties
+    uihandles
     
-    %% and assigning probabilities to each (close) pair
-    xdata = match_assign_prob(xdata,h.data,model,para);
-    setappdata(0,'xdata',xdata)
-  end
-  
-  %%% set h.status
-  h.status = struct;
-  
-  h.plots = struct;
-  
-  h.plots.c1 = struct;
-  h.plots.c1.textbox = annotation('textbox',[0.25 0.44 0.06 0.035],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c1.ROI_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c1.clusterstats_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c1.picked = struct('cluster',[],'ROI',[NaN NaN],'ROI_stat',[NaN NaN]);
-  
-  h.plots.c2 = struct;
-  h.plots.c2.ROI_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c2.textbox = annotation('textbox',[0.69 0.44 0.06 0.035],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c2.clusterstats_textbox = annotation('textbox',[0 0 0 0],'String','','FitBoxToText','on','BackgroundColor','w','Visible','off');
-  h.plots.c2.picked = struct('cluster',[],'ROI',[NaN NaN],'ROI_stat',[NaN NaN]);
-  
-  h.plots.c1.ax_ROI_display = h.ax_ROI_display;
-  h.plots.c1.ax_ROI_display_stats = h.ax_ROI_display_stats;
-  h.plots.c1.ax_clusterstats = h.ax_clusterstats;
-  h.plots.c1.slider = h.slider_choose_cluster_ID_1;
-  
-  h.plots.c2.ax_ROI_display = h.ax_ROI_display2;
-  h.plots.c2.ax_ROI_display_stats = h.ax_ROI_display_stats2;
-  h.plots.c2.ax_clusterstats = h.ax_clusterstats2;
-  h.plots.c2.slider = h.slider_choose_cluster_ID_2;
-  
-  h.parameter = struct('ROI_thr',0);
-  
-  h.dblclick = tic;
-  
-  % Choose default command line output for ROI_matching
-  h.output = hObject;
-
-  % Update handles structure
-  guidata(hObject, h);
-
-% UIWAIT makes ROI_matching wait for user response (see UIRESUME)
-% uiwait(handles.figure1);
-
-
-% --- Outputs from this function are returned to the command line.
-function varargout = ROI_matching_OutputFcn(hObject, eventdata, handles) 
-% varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Get default command line output from handles structure
-varargout{1} = handles.output;
-
-
-% --- Executes on button press in button_clustering.
-function button_clustering_Callback(hObject, eventdata, h)
-% hObject    handle to button_clustering (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
+    c_disp
     
-  disp('ROI_clustering...')
-  
-  appdata = get(0,'ApplicationData');
-  pre_clustering(h);
-  
-  clusters = getappdata(0,'clusters');
-  
-  h = cluster2handle(h,clusters);
-  
-  
-  %% after total number of clusters is known
-  nCluster = 200;%length(clusters);
-  h.data.nCluster = nCluster;
-  
-  h.plots.cluster = struct('thickness',cell(nCluster,1),'color',cell(nCluster,1));
-  
-  h.data.cluster_ct = zeros(h.data.nCluster,1);
-  h.data.cluster_score = zeros(h.data.nCluster,1);
-  h.data.cluster_centroids = zeros(h.data.nCluster,2);
-  
-  
-  h.status.active = true(h.data.nCluster,1);
-  h.status.completed = false(h.data.nCluster,1);
-  h.status.deleted = false(h.data.nCluster,1);
-  h.status.cluster_multiROI = false(h.data.nCluster,1);
-  h.status.cluster_polyROI = false(h.data.nCluster,1);
-  h.status.session = struct('deleted',cell(h.data.nSes,1),'visible',cell(h.data.nSes,1));
-  
-  for s = 1:h.data.nSes
-    h.status.session(s).visible = true;
-    h.status.session(s).deleted = false(h.data.session(s).nROI,1);
-  end
-  
-  set(h.slider_choose_cluster_ID_1,'Min',0,'Max',h.data.nCluster,'SliderStep',[1/h.data.nCluster,10/h.data.nCluster],'Value',0)
-  set(h.slider_choose_cluster_ID_2,'Min',0,'Max',h.data.nCluster,'SliderStep',[1/h.data.nCluster,10/h.data.nCluster],'Value',0)
-  
-  
-  %% first run of updating data for all
-  for c = 1:nCluster
-    h = DUF(h,c,false);
-  end
-  clusters = getappdata(0,'clusters');
-  h.data.cluster_centroids(1:nCluster,:) = cat(1,clusters.centroid);
-
-  
-  disp(sprintf('number of ROI_clusters: %d',nCluster))
-  disp(sprintf('number of real ROI_clusters: %d',sum(h.data.cluster_ct > 1)))
-  
-  
-  %%% initial plotting of all clusters
-  load('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884/Session01/reduced_MF1_LK1.mat','max_im')
-  imagesc(h.ax_cluster_display,max_im,'Hittest','off')
-  colormap(h.ax_cluster_display,'gray')
-  
-  for c = 1:nCluster
-    h.plots.cluster_handles(c) = cluster_plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-',h.plots.clusters(c).color,h.plots.clusters(c).thickness);
-  end
-  xlim(h.ax_cluster_display,[1,h.data.imSize(2)])
-  ylim(h.ax_cluster_display,[1,h.data.imSize(1)])
-  
-  set(h.ax_cluster_display,'ButtonDownFcn',@pickCluster,'Hittest','on','PickableParts','All');
-  
-  %% plot overall stats
-  h.plots.histo_ct = histogram(h.ax_matchstats,h.data.cluster_ct(1:h.data.nCluster));
-  xlim(h.ax_matchstats,[0,16])
-  xlabel(h.ax_matchstats,'# Sessions')
-  ylabel(h.ax_matchstats,'# clusters')
-  
-  h.plots.histo_score = histogram(h.ax_matchstats2,h.data.cluster_score(1:h.data.nCluster),linspace(0,1,21));
-  xlim(h.ax_matchstats2,[0,1])
-  xlabel(h.ax_matchstats2,'score')
-  ylabel(h.ax_matchstats2,'# clusters')
-  
-  guidata(hObject, h);
-  
-  %% some GUI updates
-  set(h.radio_plot_to_left,'Value',true)
-  
-  set(h.entry_cluster_ID_1,'enable','on')
-  set(h.entry_cluster_ID_2,'enable','on')
-  
-  set(h.dropdown_filter_type,'enable','on')
-  set(h.dropdown_filter_ll_gg,'enable','on')
-  set(h.entry_filter_value,'enable','on')
-  
-  
-  
-  
-
-function entry_display_session_Callback(hObject, eventdata, h)
-% hObject    handle to entry_display_session (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_display_session as text
-%        str2double(get(hObject,'String')) returns contents of entry_display_session as a double
-  
-  for s = 1:h.data.nSes
-    h.status.session(s).visible = false;
-  end
-  
-  s_vis = str2num(get(h.entry_display_session,'String'));
-  if isempty(s_vis)
-    s_vis = 0;
-    set(h.entry_display_session,'String',sprintf('%d',s_vis))
-  elseif s_vis
-    h.status.session(s_vis).visible = true;
-    if s_vis == h.data.nSes
-      set(h.button_next_session,'enable','off')
-    else
-      set(h.button_next_session,'enable','on')
-    end
-    set(h.button_prev_session,'enable','on')
-  elseif ~s_vis
-    set(h.button_prev_session,'enable','off')
-  end
-  guidata(hObject,h)
-  
-  if get(h.radio_plot_to_left,'Value');
-    ax_handle = h.plots.c1;
-  else
-    ax_handle = h.plots.c2;
-  end
-  display_sessions(h,ax_handle)
-  
-  
-% --- Executes during object creation, after setting all properties.
-function entry_display_session_CreateFcn(hObject, eventdata, h)
-% hObject    handle to entry_display_session (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in button_prev_session.
-function button_prev_session_Callback(hObject, eventdata, h)
-% hObject    handle to button_prev_session (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
-  %% remove earlier visibility
-  s_vis = str2num(get(h.entry_display_session,'String'));
-  if isempty(s_vis)
-    s_vis = 0;
-    for s = 1:h.data.nSes
-      h.status.session(s).visible = false;
-    end
-  else
-    h.status.session(s_vis).visible = false;
-  
-    %% add updated visibility
-    s_vis = s_vis-1;
-  end
-  
-  if s_vis
-    h.status.session(s_vis).visible = true;
-  end
-  set(h.entry_display_session,'String',sprintf('%d',s_vis))
-  guidata(hObject,h)
-  
-  if get(h.radio_plot_to_left,'Value');
-    ax_handle = h.plots.c1;
-  else
-    ax_handle = h.plots.c2;
-  end
-  display_sessions(h,ax_handle)
-  
-  if s_vis == 0
-    set(h.button_prev_session,'enable','off')
-  else
-    set(h.button_prev_session,'enable','on')
-  end
-  set(h.button_next_session,'enable','on')
-
-% --- Executes on button press in button_next_session.
-function button_next_session_Callback(hObject, eventdata, h)
-% hObject    handle to button_next_session (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
-  %% remove earlier visibility
-  s_vis = str2num(get(h.entry_display_session,'String'));
-  if isempty(s_vis)
-    s_vis = 0;
-    for s = 1:h.data.nSes
-      h.status.session(s).visible = false;
-    end
-  else
-    if s_vis
-      h.status.session(s_vis).visible = false;
-    end
+    plots
+    hwait
     
-    %% add updated visibility
-    s_vis = s_vis+1;
-  end
-  h.status.session(s_vis).visible = true;
-  
-  set(h.entry_display_session,'String',sprintf('%d',s_vis))
-  guidata(hObject,h)
-  
-  if get(h.radio_plot_to_left,'Value');
-    ax_handle = h.plots.c1;
-  else
-    ax_handle = h.plots.c2;
-  end
-  display_sessions(h,ax_handle)
-  
-  if s_vis == h.data.nSes
-    set(h.button_next_session,'enable','off')
-  else
-    set(h.button_next_session,'enable','on')
-  end
-  set(h.button_prev_session,'enable','on')
-
-% --- Executes on button press in checkbox_show_all_sessions.
-function checkbox_show_all_sessions_Callback(hObject, eventdata, h)
-% hObject    handle to checkbox_show_all_sessions (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_show_all_sessions
-  
-  if get(h.checkbox_show_all_sessions,'Value')
-    for s = 1:h.data.nSes
-      h.status.session(s).visible = true;
-    end
-    set(h.button_next_session,'enable','off')
-    set(h.button_prev_session,'enable','off')
-    set(h.entry_display_session,'enable','off')
-  else
-    for s = 1:h.data.nSes
-      h.status.session(s).visible = false;
-    end
-    s_vis = str2num(get(h.entry_display_session,'String'));
-    if isempty(s_vis) || ~s_vis
-      s_vis = 0;
-      set(h.entry_display_session,'String',sprintf('%d',s_vis))
-    else
-      h.status.session(s_vis).visible = true;
-    end
+    status
+    data
+    parameter
+    path
     
-    if s_vis < h.data.nSes
-      set(h.button_next_session,'enable','on')
-    end
+    dblclick
+    t
+  end
+  
+  methods
     
-    if s_vis > 0
-      set(h.button_prev_session,'enable','on')
-    end
-    
-    set(h.entry_display_session,'enable','on')
-  end
-  
-  if get(h.radio_plot_to_left,'Value');
-    ax_handle = h.plots.c1;
-  else
-    ax_handle = h.plots.c2;
-  end
-  display_sessions(h,ax_handle)
-  guidata(hObject,h)
-
-
-
-% --- Executes during object creation, after setting all properties.
-function entry_thr_occurence_CreateFcn( hObject, eventdata, handles)
-% hObject    handle to entry_thr_occurence (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in checkbox_rotate3d.
-function checkbox_rotate3d_Callback(hObject, eventdata, handles)
-% hObject    handle to checkbox_rotate3d (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_rotate3d
-
-
-% --- Executes on button press in button_discard_cluster.
-function button_discard_cluster_Callback(hObject, eventdata, h)
-% hObject    handle to button_discard_cluster (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
-  if get(h.radio_plot_to_left,'Value');
-    c = h.plots.c1.picked.cluster;
-  else
-    c = h.plots.c2.picked.cluster;
-  end
-  
-  h = remove_cluster(h,c);
-  guidata(hObject,h)
-  
-
-% --- Executes on button press in radio_clusterdisplay_2D.
-function radio_clusterdisplay_2D_3D_Callback(hObject, eventdata, h)
-% hObject    handle to radio_clusterdisplay_2D (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radio_clusterdisplay_2D
-  
-  if get(h.radio_plot_to_left,'Value');
-    c = h.plots.c1.picked.cluster;
-    if ~isempty(c)
-      [h, ax_handle] = plot_cluster(h,h.plots.c1,c);
-      h.plots.c1 = ax_handle;
-    end
-  else
-    c = h.plots.c2.picked.cluster;
-    if ~isempty(c)
-      [h, ax_handle] = plot_cluster(h,h.plots.c2,c);
-      h.plots.c2 = ax_handle;
-    end
-  end
-  guidata(hObject,h);
-  
-  
-
-% --- Executes on button press in checkbox_checked.
-function checkbox_checked_Callback(hObject, eventdata, handles)
-% hObject    handle to checkbox_checked (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_checked
-
-
-
-function entry_ROI_adjacency_Callback(hObject, eventdata, h)
-% hObject    handle to entry_ROI_adjacency (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_ROI_adjacency as text
-%        str2double(get(hObject,'String')) returns contents of entry_ROI_adjacency as a double
-  
-  if get(h.radio_plot_to_left,'Value');
-    c = h.plots.c1.picked.cluster;
-    if ~isempty(c)
-      [h, ax_handle] = plot_cluster(h,h.plots.c1,c);
-      h.plots.c1 = ax_handle;
-    end
-  else
-    c = h.plots.c2.picked.cluster;
-    if ~isempty(c)
-      [h, ax_handle] = plot_cluster(h,h.plots.c2,c);
-      h.plots.c2 = ax_handle;
-    end
-  end
-  guidata(hObject,h);
-  
-
-% --- Executes on button press in radio_clusterstats_dist.
-function radio_clusterstats_Callback(hObject, eventdata, h)
-% hObject    handle to radio_clusterstats_dist (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radio_clusterstats_dist
-  
-  clusters = getappdata(0,'clusters');
-  
-  if get(h.radio_plot_to_left,'Value');
-    c = h.plots.c1.picked.cluster;
-    if ~isempty(c)
-      h.plots.c1 = PUF_cluster_stats(h,h.plots.c1,clusters(c),c)
-    end
-  else
-    c = h.plots.c2.picked.cluster;
-    if ~isempty(c)
-      h.plots.c2 = PUF_cluster_stats(h,h.plots.c2,clusters(c),c);
-    end
-  end
-  guidata(hObject,h);
-  
-  
-  
-% --- Executes on button press in checkbox_filter_active.
-function checkbox_filter_active_Callback(hObject, eventdata, h)
-% hObject    handle to checkbox_filter_active (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_filter_active
-  
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter_type,'Value');
-  filter_val = str2double(get(h.entry_filter_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val) || ~filter_active
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-
-
-
-% --- Executes on selection change in dropdown_filter_type.
-function dropdown_filter_type_Callback(hObject, eventdata, h)
-% hObject    handle to dropdown_filter_type (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns dropdown_filter_type contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from dropdown_filter_type
-  
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter_type,'Value');
-  filter_val = str2double(get(h.entry_filter_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-  if filter_type_val>1 && ~isnan(filter_val)
-    act = 'on';
-  else
-    act = 'off';
-    set(h.checkbox_filter_active,'Value',0)
-  end
-  set(h.checkbox_filter_active,'enable',act)
-  set(h.dropdown_filter2_type,'enable',act)
-  set(h.dropdown_filter2_ll_gg,'enable',act)
-  set(h.entry_filter2_value,'enable',act)
-  
-
-% --- Executes during object creation, after setting all properties.
-function dropdown_filter_type_CreateFcn(hObject, eventdata, h)
-% hObject    handle to dropdown_filter_type (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-  if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor','white');
-  end
-  dropdown_filter_type_string = cellstr(['Specify filter 1...';...
-                                         'Session occurence  ';...
-                                         'ROI score          ';...
-                                         'finished process   ';...
-                                         'Multi-assignment   ';...
-                                         'Polygamous ROIs    ']);
-  
-  set(hObject,'String',dropdown_filter_type_string,'Value',1);
-  
-
-% --- Executes on selection change in dropdown_filter_ll_gg.
-function dropdown_filter_ll_gg_Callback(hObject, eventdata, h)
-% hObject    handle to dropdown_filter_ll_gg (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns dropdown_filter_ll_gg contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from dropdown_filter_ll_gg
-  
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter_type,'Value');
-  filter_val = str2double(get(h.entry_filter_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-  if filter_type_val>1 && ~isnan(filter_val)
-    act = 'on';
-  else
-    act = 'off';
-    set(h.checkbox_filter_active,'Value',0)
-  end
-  set(h.checkbox_filter_active,'enable',act)
-  set(h.dropdown_filter2_type,'enable',act)
-  set(h.dropdown_filter2_ll_gg,'enable',act)
-  set(h.entry_filter2_value,'enable',act)
-  
-  
-% --- Executes during object creation, after setting all properties.
-function dropdown_filter_ll_gg_CreateFcn(hObject, eventdata, h)
-% hObject    handle to dropdown_filter_ll_gg (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-  if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor','white');
-  end
-  dropdown_filter_ll_gg_string = cellstr(['<';'>']);
-  set(hObject,'String',dropdown_filter_ll_gg_string,'Value',2);
-
-
-function entry_filter_value_Callback(hObject, eventdata, h)
-% hObject    handle to entry_filter_value (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_filter_value as text
-%        str2double(get(hObject,'String')) returns contents of entry_filter_value as a double
-
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter_type,'Value');
-  filter_val = str2double(get(h.entry_filter_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-  if filter_type_val>1 && ~isnan(filter_val)
-    act = 'on';
-  else
-    act = 'off';
-    set(h.checkbox_filter_active,'Value',0)
-  end
-  set(h.checkbox_filter_active,'enable',act)
-  set(h.dropdown_filter2_type,'enable',act)
-  set(h.dropdown_filter2_ll_gg,'enable',act)
-  set(h.entry_filter2_value,'enable',act)
-  
-
-
-% --- Executes on selection change in dropdown_filter2_ll_gg.
-function dropdown_filter2_ll_gg_Callback(hObject, eventdata, h)
-% hObject    handle to dropdown_filter2_ll_gg (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns dropdown_filter2_ll_gg contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from dropdown_filter2_ll_gg
-
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter2_type,'Value');
-  filter_val = str2double(get(h.entry_filter2_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-
-% --- Executes during object creation, after setting all properties.
-function dropdown_filter2_ll_gg_CreateFcn(hObject, eventdata, h)
-% hObject    handle to dropdown_filter2_ll_gg (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-  if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor','white');
-  end
-  dropdown_filter_ll_gg_string = cellstr(['<';'>']);
-  set(hObject,'String',dropdown_filter_ll_gg_string,'Value',2);
-
-
-function entry_filter2_value_Callback(hObject, eventdata, h)
-% hObject    handle to entry_filter2_value (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_filter2_value as text
-%        str2double(get(hObject,'String')) returns contents of entry_filter2_value as a double
-  
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter2_type,'Value');
-  filter_val = str2double(get(h.entry_filter2_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-
-
-% --- Executes on selection change in dropdown_filter2_type.
-function dropdown_filter2_type_Callback(hObject, eventdata, h)
-% hObject    handle to dropdown_filter2_type (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns dropdown_filter2_type contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from dropdown_filter2_type
-
-  filter_active = get(h.checkbox_filter_active,'Value');
-  filter_type_val = get(h.dropdown_filter2_type,'Value');
-  filter_val = str2double(get(h.entry_filter2_value,'String'));
-  if filter_active && filter_type_val>1 && ~isnan(filter_val)
-    h = apply_filter(h);
-    guidata(hObject,h)
-  end
-  
-
-% --- Executes during object creation, after setting all properties.
-function dropdown_filter2_type_CreateFcn(hObject, eventdata, h)
-% hObject    handle to dropdown_filter2_type (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-  if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor','white');
-  end
-  dropdown_filter_type_string = cellstr(['Specify filter 2...';...
-                                         'Session occurence  ';...
-                                         'ROI score          ';...
-                                         'finished process   ';...
-                                         'Multi-assignment   ';...
-                                         'Polygamous ROIs    ']);
-  
-  set(hObject,'String',dropdown_filter_type_string,'Value',1);
-  
-  
-
-  
-
-function entry_cluster_ID_1_Callback(hObject, eventdata, h)
-% hObject    handle to entry_cluster_ID_1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_cluster_ID_1 as text
-%        str2double(get(hObject,'String')) returns contents of entry_cluster_ID_1 as a double
-  
-  c = str2num(get(h.entry_cluster_ID_1,'String'));
-  h = choose_cluster(h,c,'left');
-  guidata(hObject,h)
- 
-  
-  
-% --- Executes on button press in checkbox_finished.
-function checkbox_finished_Callback(hObject, eventdata, h)
-% hObject    handle to checkbox_finished (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_finished
-  
-  if get(h.radio_plot_to_left,'Value')
-    c = h.plots.c1.picked.cluster;
-  else
-    c = h.plots.c2.picked.cluster;
-  end
-  h.status.completed(c) = logical(get(h.checkbox_finished,'Value'));
-  
-  if h.status.completed(c)
-    set(h.plots.cluster_handles(c),'LineStyle',':')
-  else
-    set(h.plots.cluster_handles(c),'LineStyle','-')
-  end
-  DUF_process_info(h)
-  guidata(hObject,h)
-
-
-% --- Executes on button press in button_multi_remove_IDs.
-function button_multi_remove_IDs_Callback(hObject, eventdata, h)
-% hObject    handle to button_multi_remove_IDs (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
-  if get(h.radio_plot_to_left,'Value')
-    c = h.plots.c1.picked.cluster;
-  else
-    c = h.plots.c2.picked.cluster;
-  end
-  
-  xdata = getappdata(0,'xdata');
-  
-  for s = 1:h.data.nSes
-    for i = 1:h.data.clusters(c).occupancy(s)
-      n = h.data.clusters(c).session(s).list(i);
-      h = clear_ID(h,xdata,c,s,n);
-    end
-  end
-  
-  h = DUF_cluster_status(h,c);
-  PUF_assignment_stats(h,get_axes(h,c),c)
-  guidata(hObject,h)
-  
-
-
-% --- Executes on button press in checkbox_ROI_unsure.
-function checkbox_ROI_unsure_Callback(hObject, eventdata, h)
-% hObject    handle to checkbox_ROI_unsure (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of checkbox_ROI_unsure
-
-
-% --- Executes on button press in button_active_clusters_finished.
-function button_active_clusters_finished_Callback(hObject, eventdata, h)
-% hObject    handle to button_active_clusters_finished (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of button_active_clusters_finished
-  
-  idx = find(h.status.active);
-  
-  if all(~h.status.completed(h.status.active))
-    h.status.completed(h.status.active) = true;
-    
-    for c = idx
-      set(h.plots.cluster_handles(c),'LineStyle',':')
-    end
-  else
-    h.status.completed(h.status.active) = false;
-    
-    for c = idx
-      set(h.plots.cluster_handles(c),'LineStyle','-')
-    end
-  end
-  DUF_process_info(h)
-  guidata(hObject,h)
-  
-  
-% --- Executes on slider movement.
-function slider_choose_cluster_ID_2_Callback(hObject, eventdata, h)
-% hObject    handle to slider_choose_cluster_ID_2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-  
-  c = round(get(hObject, 'Value'));
-  
-  direction = sign(c-h.plots.c2.picked.cluster);
-  
-  %% find next active
-  while ~h.status.active(c)
-    if direction > 0
-      c = mod(c,h.data.nCluster)+1;
-    else
-      c = mod(c-2,h.data.nCluster)+1;
-    end
-    
-  end
-  
-  set(hObject, 'Value', c);
-  set(h.entry_cluster_ID_2,'String',sprintf('%d',c))
-  
-  h = choose_cluster(h,c,'right');
-  guidata(hObject,h)
-
-% --- Executes during object creation, after setting all properties.
-function slider_choose_cluster_ID_2_CreateFcn(hObject, eventdata, h)
-% hObject    handle to slider_choose_cluster_ID_2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: slider controls usually have a light gray background.
-  if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor',[.9 .9 .9]);
-  end
-  
-  set(hObject,'enable','off')
-
-  
-% --- Executes on slider movement.
-function slider_choose_cluster_ID_1_Callback(hObject, eventdata, h)
-% hObject    handle to slider_choose_cluster_ID_1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-  
-  c = round(get(hObject, 'Value'));
-  %% get direction
-  direction = sign(c-h.plots.c1.picked.cluster);
-  
-  %% find next active
-  while ~h.status.active(c)
-    if direction > 0
-      c = mod(c,h.data.nCluster)+1;
-    else
-      c = mod(c-2,h.data.nCluster)+1;
-    end
-    
-  end
-  
-  set(hObject, 'Value', c);
-  set(h.entry_cluster_ID_1,'String',sprintf('%d',c))
-  
-  h = choose_cluster(h,c,'left');
-  guidata(hObject,h)
-
-% --- Executes during object creation, after setting all properties.
-function slider_choose_cluster_ID_1_CreateFcn(hObject, eventdata, h)
-% hObject    handle to slider_choose_cluster_ID_1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: slider controls usually have a light gray background.
-  if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-      set(hObject,'BackgroundColor',[.9 .9 .9]);
-  end
-  
-  set(hObject,'enable','off')
-  
-  
-% --- Executes on button press in radiobutton10.
-function radiobutton10_Callback(hObject, eventdata, h)
-% hObject    handle to radiobutton10 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radiobutton10
-
-
-
-function entry_cluster_ID_2_Callback(hObject, eventdata, h)
-% hObject    handle to entry_cluster_ID_2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of entry_cluster_ID_2 as text
-%        str2double(get(hObject,'String')) returns contents of entry_cluster_ID_2 as a double
-
-  c = str2num(get(h.entry_cluster_ID_2,'String'));
-  h = choose_cluster(h,c,'right');
-  guidata(hObject,h)
-  
-  
-% --- Executes during object creation, after setting all properties.
-function entry_cluster_ID_2_CreateFcn(hObject, eventdata, h)
-% hObject    handle to entry_cluster_ID_2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in radio_plot_to_left.
-function radio_plot_to_left_Callback(hObject, eventdata, h)
-% hObject    handle to radio_plot_to_left (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radio_plot_to_left
-  
-  set(h.radio_plot_to_right,'Value',~get(hObject,'Value'))
-
-
-% --- Executes on button press in radio_plot_to_right.
-function radio_plot_to_right_Callback(hObject, eventdata, h)
-% hObject    handle to radio_plot_to_right (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radio_plot_to_right
-  
-  set(h.radio_plot_to_left,'Value',~get(hObject,'Value'))
-
-
-
-% --- Executes on button press in button_remove_ROIs.
-function button_remove_ROIs_Callback(hObject, eventdata, h)
-% hObject    handle to button_remove_ROIs (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-  
-  if get(h.radio_plot_to_left,'Value')
-    c = h.plots.c1.picked.cluster;
-  else
-    c = h.plots.c2.picked.cluster;
-  end
-  
-  for s = 1:h.data.nSes
-    for n = h.data.clusters(c).session(s).list
-      h = remove_ROI(h,s,n)
-    end
-  end
-  
-  h = remove_cluster(h,c);
-  guidata(hObject,h)
-
-
-
-%%% -------------------------------------- other functions -------------------------------------%%%
-
-function h = choose_cluster(h,c,side)
-
-  if nargin == 3
-    side_left = strcmp(side,'left');
-  else
-    side_left = get(h.radio_plot_to_left,'Value');
-  end
-  
-  if isempty(c) || isnan(c) || c < 1 || c > h.data.nCluster
-    c = [];
-  end
-  
-  if side_left;
-    if ~isempty(h.plots.c1.picked.cluster)
-      set(h.plots.cluster_handles(h.plots.c1.picked.cluster),'Color',h.plots.clusters(h.plots.c1.picked.cluster).color)
-    end
-    h.plots.c1.picked.cluster = c;
-    PUF_cluster_textbox(h,h.plots.c1,c)
-    [h, ax_handle] = plot_cluster(h,h.plots.c1,c);
-    h.plots.c1 = ax_handle;
-    set(h.entry_cluster_ID_1,'String',sprintf('%d',c))
-  else
-    if ~isempty(h.plots.c2.picked.cluster)
-      set(h.plots.cluster_handles(h.plots.c2.picked.cluster),'Color',h.plots.clusters(h.plots.c2.picked.cluster).color)
-    end
-    h.plots.c2.picked.cluster = c;
-    PUF_cluster_textbox(h,h.plots.c2,c)
-    [h, ax_handle] = plot_cluster(h,h.plots.c2,c);
-    h.plots.c2 = ax_handle;
-    set(h.entry_cluster_ID_2,'String',sprintf('%d',c))
-  end
-  
-  
-  
-  if ~isempty(c)
-    set(h.plots.cluster_handles(c),'Color','m')
-    
-    set(h.checkbox_finished,'Value',h.status.completed(c),'enable','on')
-    if side_left
-      set(h.plots.c1.slider,'Value',c)
-    else
-      set(h.plots.c2.slider,'Value',c)
-    end
-  else
-    set(h.checkbox_finished,'Value',0,'enable','off')
-    if side_left
-      set(h.plots.c1.slider,'Value',0)
-    else
-      set(h.plots.c2.slider,'Value',0)
-    end
-  end
-
-
-function h = apply_filter(h)
-  
-  filter_active = get(h.checkbox_filter_active,'Value');
-  
-  filter_type_val = get(h.dropdown_filter_type,'Value');
-  filter_type_str = get(h.dropdown_filter_type,'String');
-  filter_type = filter_type_str{filter_type_val};
-  
-  filter_ll_gg_val = get(h.dropdown_filter_ll_gg,'Value');
-  filter_ll_gg_str = get(h.dropdown_filter_ll_gg,'String');
-  filter_ll_gg = filter_ll_gg_str{filter_ll_gg_val};
-  
-  filter_val = str2double(get(h.entry_filter_value,'String'));
-  
-  if filter_active && filter_type_val>1 && ~isempty(filter_val) 
-    
-    filter2_type_val = get(h.dropdown_filter2_type,'Value');
-    filter2_type_str = get(h.dropdown_filter2_type,'String');
-    filter2_type = filter2_type_str{filter2_type_val};
-    
-    filter2_ll_gg_val = get(h.dropdown_filter2_ll_gg,'Value');
-    filter2_ll_gg_str = get(h.dropdown_filter2_ll_gg,'String');
-    filter2_ll_gg = filter2_ll_gg_str{filter2_ll_gg_val};
-    
-    filter2_val = str2double(get(h.entry_filter2_value,'String'));
-    
-    switch filter_type
-      case 'Session occurence'
-        stats = h.data.cluster_ct;
-      case 'ROI score'
-        stats = h.data.cluster_score;
-      case 'Multi-assignment'
-        stats = h.status.cluster_multiROI;
-      case 'finished process'
-        stats = h.status.completed;
-      case 'Polygamous ROIs'
-        stats = h.status.cluster_polyROI;
-    end
-    
-    switch filter_ll_gg
-      case '<'
-        h.status.active = stats < filter_val & ~h.status.deleted;
-      case '>'
-        h.status.active = stats > filter_val & ~h.status.deleted;
-    end
-    
-    if filter2_type_val>1 && ~isempty(filter2_val)
-      switch filter2_type
-        case 'Session occurence'
-          stats = h.data.cluster_ct;
-        case 'ROI score'
-          stats = h.data.cluster_score;
-        case 'Multi-assignment'
-          stats = h.status.cluster_multiROI;
-        case 'finished process'
-          stats = h.status.completed;
-        case 'Polygamous ROIs'
-          stats = h.status.cluster_polyROI;
-      end
+    % --- Executes just before ROI_matching is made visible.
+    function h = ROI_matching(reload)
       
-      switch filter2_ll_gg
-        case '<'
-          h.status.active = h.status.active & stats < filter2_val & ~h.status.deleted;
-        case '>'
-          h.status.active = h.status.active & stats > filter2_val & ~h.status.deleted;
-      end
-    end
-    
-    if ~h.status.active(h.plots.c1.picked.cluster)
-      h = choose_cluster(h,[],'left');
-    end
-    if ~h.status.active(h.plots.c2.picked.cluster)
-      h = choose_cluster(h,[],'right');
-    end
-    
-  else
-    h.status.active = ~h.status.deleted;
-  end
-  
-  for c = 1:h.data.nCluster
-    if ~h.status.deleted(c)
-      if h.status.active(c)
-        set(h.plots.cluster_handles(c),'Visible','on')
-      else
-        set(h.plots.cluster_handles(c),'Visible','off')
-      end
-    end
-  end
-  DUF_process_info(h)
-
-
-  
-function display_sessions(h,ax_handle)
-  
-  c = ax_handle.picked.cluster;
-  
-  for s = 1:h.data.nSes
-    if length(ax_handle.session(s).ROI_ID)
-      if h.status.session(s).visible
-        vis = 'on';
-      else
-        vis = 'off';
-      end
-      for i = 1:length(ax_handle.session(s).ROI_ID)
-        n = ax_handle.session(s).ROI_ID(i);
-        if ~ismember(n,h.data.clusters(c).session(s).list)
-          set(ax_handle.session(s).ROI(i),'Visible',vis)
+      hfig = openfig('ROI_matching_fig.fig','reuse');
+      
+      if ~nargin || ~reload
+        h.uihandles = guihandles(hfig);
+        
+        %% process input
+        h.status = struct;
+        h.status.picked.markROIs = [];
+        h.status.mark = '';
+        
+        h.plots = struct;
+        h.data = struct;
+        
+        h.parameter = struct('ROI_thr',0);
+        
+        h.dblclick = tic;
+        
+        set(h.uihandles.button_clustering,'enable','off')
+        set(h.uihandles.entry_data_path,'String','/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884')
+%          set(h.uihandles.entry_data_path,'String','/media/wollex/AS2/Masaaki/884')
+        
+        h.set_paths()
+        
+        set(h.uihandles.button_save,'enable','off')
+        
+        %% construct GUI for single-cluster display
+        pos_ax = {[0.03, 0.1, 0.25, 0.3],...
+                  [0.3, 0.1, 0.05, 0.3],...
+                  [0.03, 0.5, 0.25, 0.1]};
+        pos_txt = {[0.03 0.4 0.05 0.035],...
+                  [0.03 0.36 0.06 0.035]};
+%          pos_GUI = {[0.03, 0.03, 0.2, 0.015],...
+%                    [0.3, 0.03, 0.03, 0.02],...
+%                    [0.15, 0.45, 0.05, 0.02]};
+        h.c_disp.c(1) = build_GUI_cluster_display(h,pos_ax,pos_txt);
+        
+        
+        pos_ax = {[0.72, 0.1, 0.25, 0.3],...
+                  [0.65, 0.1, 0.05, 0.3],...
+                  [0.72, 0.5, 0.25, 0.1]};
+        pos_txt = {[0.92 0.4 0.05 0.035],...
+                  [0.91 0.36 0.06 0.035]};
+%          pos_GUI = {[0.72, 0.03, 0.2, 0.015],...
+%                    [0.94, 0.03, 0.03, 0.02],...
+%                    [0.8, 0.45, 0.05, 0.02]};
+        h.c_disp.c(2) = build_GUI_cluster_display(h,pos_ax,pos_txt);
+        
+        
+        dropdown_filter_type_string = cellstr(['Specify filter 1...';...
+                                              'Session occurence  ';...
+                                              'ROI score          ';...
+                                              'finished process   ';...
+                                              'Multi-assignment   ';...
+                                              'Polygamous ROIs    ';...
+                                              'Tag: "unsure"      ']);
+        
+        set(h.uihandles.dropdown_filter1_type,'String',dropdown_filter_type_string,'Value',1,'Callback',@h.dropdown_filter_type_Callback)
+        
+        
+        dropdown_filter_type_string = cellstr(['Specify filter 2...';...
+                                              'Session occurence  ';...
+                                              'ROI score          ';...
+                                              'finished process   ';...
+                                              'Multi-assignment   ';...
+                                              'Polygamous ROIs    ']);
+        
+        set(h.uihandles.dropdown_filter2_type,'String',dropdown_filter_type_string,'Value',1,'Callback',@h.dropdown_filter_type_Callback)
+        
+        dropdown_filter_ll_gg_string = cellstr(['<';'>']);
+        set(h.uihandles.dropdown_filter1_ll_gg,'String',dropdown_filter_ll_gg_string,'Value',2,'Callback',@h.dropdown_filter_ll_gg_Callback)
+        set(h.uihandles.dropdown_filter2_ll_gg,'String',dropdown_filter_ll_gg_string,'Value',2,'Callback',@h.dropdown_filter_ll_gg_Callback)
+        
+        for obj = h.c_disp.c
+          set(obj.slider_cluster_ID,'Callback',{@h.slider_cluster_ID_Callback,obj})
+          set(obj.entry_cluster_ID,'Callback',{@h.entry_cluster_ID_Callback,obj})
+          set(obj.button_refresh,'Callback',{@h.button_refresh_Callback,obj})
+        
+          set(obj.radio_active,'Callback',{@h.radio_active_Callback})
         end
-      end
-    end
-  end
-  
-  
-  
-function [disallowRotation] = myRotateFilter(obj,eventdata)
-  disallowRotation = false;
-  % if a ButtonDownFcn has been defined for the object, then use that
-  if isfield(get(obj),'ButtonDownFcn')
-      disallowRotation = ~isempty(get(obj,'ButtonDownFcn'));
-  end
-  
-  
-  
-function click_ROI(hObject,eventdata,ID,ax_ID)
-  
-  h = guidata(hObject);
-% ID contains: (c,s,n)
-  c = ID(1);
-  s = ID(2);
-  n = ID(3);
-  
-  t = toc(h.dblclick);
-  
-  f = hObject.Parent.Parent;
-  if ~strcmp(f.SelectionType, 'alt')
-    
-    if ax_ID == 1 && t < 0.3   %% doubleclick (not on clusterstats)
-      if eq(hObject.Parent,h.plots.c1.ax_ROI_display) || eq(hObject.Parent,h.plots.c1.ax_clusterstats)
-        toggle_belong(hObject,eventdata,ID);
-        h = guidata(hObject);
-      else
-        toggle_belong(hObject,eventdata,ID);
-        h = guidata(hObject);
-      end
-      h.dblclick = tic-2; %% disable double click trigger for next click
-    else
-      if eq(hObject.Parent,h.plots.c1.ax_ROI_display) || eq(hObject.Parent,h.plots.c1.ax_clusterstats)
-        [h ax_handle] = display_ROI_info(h,h.plots.c1,hObject,ax_ID,ID);
-        h.plots.c1 = ax_handle;
-      else
-        [h ax_handle] = display_ROI_info(h,h.plots.c2,hObject,ax_ID,ID);
-        h.plots.c2 = ax_handle;
+        
+        set(h.uihandles.entry_filter1_value,'Callback',@h.entry_filter_value_Callback)
+        set(h.uihandles.entry_filter2_value,'Callback',@h.entry_filter_value_Callback)
+        
+        set(h.uihandles.checkbox_filter,'Callback',@h.checkbox_filter_Callback)
+        
+        set(h.uihandles.entry_cluster_displayed_first,'Callback',@h.entry_cluster_displayed_Callback)
+        set(h.uihandles.entry_cluster_displayed_last,'Callback',@h.entry_cluster_displayed_Callback)
+        
+        set(h.uihandles.button_toggle_active_processed,'Callback',@h.button_toggle_active_processed_Callback)
+        
+        set(h.uihandles.button_data_path,'Callback',@h.button_data_path_Callback)
+        
+        set(h.uihandles.entry_ROI_adjacency,'Callback',@h.entry_ROI_adjacency_Callback)
+        
+        set(h.uihandles.entry_display_session,'Callback',@h.entry_display_session_Callback)
+        set(h.uihandles.button_clustering,'Callback',@h.button_clustering_Callback)
+        
+        set(h.uihandles.checkbox_ROI_unsure,'Callback',@h.checkbox_ROI_unsure_Callback)
+        set(h.uihandles.checkbox_processed,'Callback',@h.toggle_processed)
+        set(h.uihandles.checkbox_unsure,'Callback',@h.checkbox_unsure_Callback)
+        set(h.uihandles.checkbox_merge,'Callback',@h.checkbox_merge_Callback)
+        set(h.uihandles.checkbox_split,'Callback',@h.checkbox_split_Callback)
+        
+        set(h.uihandles.checkbox_show_all_sessions,'Callback',@h.checkbox_show_all_sessions_Callback)
+        set(h.uihandles.button_prev_session,'Callback',@h.button_prev_session_Callback)
+        set(h.uihandles.button_next_session,'Callback',@h.button_next_session_Callback)
+        set(h.uihandles.entry_display_session,'Callback',@h.entry_display_session_Callback)
+        
+        set(h.uihandles.button_load,'Callback',@h.button_load_Callback)
+        set(h.uihandles.button_save,'Callback',@h.button_save_Callback)
+        
+        set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
+        
+        set(h.uihandles.table_ROI_manipulation,'ColumnName',{'' 'c' 'ROI ID' 'type' 'to shape of...'})
+        set(h.uihandles.table_ROI_manipulation,'ColumnWidth',{[30],[50],[100],[50],[110]})
+        set(h.uihandles.table_ROI_manipulation,'Data',cell(0,5),'Visible','off')
+        
+        set(h.uihandles.table_ROI_manipulation,'CellSelectionCallback',@h.table_menu_CellSelectionCallback)
+        set(h.uihandles.button_run_manipulation,'Callback',@h.button_run_manipulation_Callback,'enable','off')
+        
+        set(h.uihandles.button_remove_ROIs,'Callback',@h.button_remove_ROIs_Callback)
+        set(h.uihandles.button_discard_cluster,'Callback',@h.button_discard_cluster_Callback)
+        set(h.uihandles.button_multi_remove_IDs,'Callback',@h.button_multi_remove_IDs_Callback)
+        
+        set(h.uihandles.figure1,'DeleteFcn',@h.delete)
+        
+        h.t.timer = timer(); % Put the timer object inside handles so that you can stop it later
+        h.t.timer.Period = 2;
+        h.t.timer.ExecutionMode = 'fixedRate';
+        h.t.timer.TimerFcn = @(~,event) h.update_time(); % Here is where you assign the callback function
+        h.t.start = tic;
+        h.t.offset = 0;
+        start(h.t.timer)
+
       end
       
-      h.dblclick = tic;
+      % Choose default command line output for ROI_matching
+%        h.output = hObject;
+      
     end
     
-    guidata(hObject,h)
-  end
-  
-  
-function pickCluster(hObject,eventdata)
-
-  h = guidata(hObject);
-  
-  clusters = getappdata(0,'clusters');
-  coords = get(hObject,'CurrentPoint');
-  
-  if get(h.radio_plot_to_left,'Value')
-    c_old = h.plots.c1.picked.cluster;
-  else
-    c_old = h.plots.c2.picked.cluster;
-  end
-  
-  [min_val c_idx] = min(sum((h.data.cluster_centroids(h.status.active,1)-coords(1,2)).^2 + (h.data.cluster_centroids(h.status.active,2)-coords(1,1)).^2,2));
-  idxes = find(h.status.active);
-  c = idxes(c_idx);
-  
-  if sqrt(min_val) < 10
-    pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
-                    get(gcf, 'Units'), 'Normalized', gcf);
-    if c == c_old
-      c = [];
-    end
-    h = choose_cluster(h,c);
-    guidata(hObject,h)
-  end
-  
-  
-
-function h = clear_ID(h,xdata,c,s,n)
-  
-  clusters = getappdata(0,'clusters');
-  
-  for c_other = setdiff(h.data.session(s).ROI(n).cluster_ID,c)
-    ax_handle = get_axes(h,c_other);
-    
-    cluster_IDs = setdiff(h.data.clusters(c_other).session(s).list,n);
-    
-    h.data.clusters(c_other).session(s).list = cluster_IDs;
-    clusters(c_other).session(s).list = cluster_IDs;
-    
-    h = DUF_cluster_occupancy(h,c_other);
-    h = DUF_cluster_status(h,c_other);
-    [h,clusters(c_other)] = DUF_cluster_stats(h,xdata,clusters(c_other),c_other);
-    clusters = DUF_cluster_shape(h,clusters,c_other);
-    
-    delete(h.plots.cluster_handles(c_other))
-    h.plots.cluster_handles(c_other) = cluster_plot_blobs(h.ax_cluster_display,full(clusters(c_other).A),[],h.parameter.ROI_thr,'-','m',h.plots.clusters(c_other).thickness);
-    
-    PUF_assignment_stats(h,ax_handle,c_other)
-    PUF_ROI_face(h,ax_handle,[c_other,s,n])
-    PUF_cluster_textbox(h,ax_handle,c_other)
-    
-  end
-  h.data.session(s).ROI(n).cluster_ID = c;
-  
-  setappdata(0,'clusters',clusters)
-  
-  for c_other = setdiff(h.data.session(s).ROI(n).cluster_ID,c)
-    ax_handle = get_axes(h,c_other);
-    
-    h = DUF_cluster_occupancy(h,c_other);
-    h = DUF_cluster_status(h,c_other);
-    PUF_assignment_stats(h,ax_handle,c_other)
-    PUF_ROI_face(h,ax_handle,[c_other,s,n])
-  end
-  
-  
-
-function h = remove_cluster(h,c)
- 
- %% popupmsg to notify, that a cluster has been removed
-  disp(sprintf('Uh oh, cluster %d was stripped of all of its ROIs. Removing!',c))
-  
-  clusters = getappdata(0,'clusters');
-    
-  clusters(c).session = [];
-  clusters(c).score: NaN;
-  clusters(c).ct = 0;
-  clusters(c).A = [];
-  clusters(c).centroid = [NaN NaN];
-  
-  h.data.clusters(c).session = [];
-  h.data.clusters(c).occupancy = [];
-  h.data.clusters(c).polyROI = [];
-  
-  setappdata(0,'clusters',clusters)
-  
-  %% remove cluster plot from overview
-  delete(h.plots.cluster_handles(c))
-  
-  %% set all status value to false (not changeable by filters or smth)
-  h.status.clusters_polyROI(c) = false;
-  h.status.cluster_multiROI(c) = false;
-  h.status.active(c) = false;
-  h.status.completed(c) = false;
-  h.status.deleted(c) = true;
-  
-  h.data.cluster_ct(c) = NaN;
-  h.data.cluster_score(c) = NaN;
-  
-  if h.plots.c1.picked.cluster == c
-    h.plots.c1.picked.cluster = [];
-  elseif h.plots.c2.picked.cluster == c
-    h.plots.c2.picked.cluster = [];
-  end
-  
-  %% update status values and texts
-  DUF_process_info(h)
-  
-    
-function ax_handle = get_axes(h,c)
-  if h.plots.c1.picked.cluster == c
-    ax_handle = h.plots.c1;
-  elseif h.plots.c2.picked.cluster == c
-    ax_handle = h.plots.c2;
-  else
-    ax_handle = [];
-  end
-  
-  
-  
-  
-%%% ---------------------------------- end: other functions ------------------------------------%%%
-
-
-%%% ------------------------------ start: data updating functions (DUF) ------------------------------%%%
-
-
-function h = DUF(h,c,calc)
-  
-  if nargin == 3
-    h.status.clusters(c) = struct('calc_occupancy',calc,'calc_status',calc,'calc_shape',calc,'calc_stats',calc);
-  end
-  
-  h = DUF_cluster_occupancy(h,c);
-  h = DUF_cluster_status(h,c);
-  
-  if ~h.status.clusters(c).calc_shape || ~h.status.clusters(c).calc_stats
-    clusters = getappdata(0,'clusters');
-    clusters(c) = DUF_cluster_shape(h,clusters(c),c);
-    [h, clusters(c)] = DUF_cluster_stats(h,clusters(c),c);
-    setappdata(0,'clusters',clusters)
-  end
-  
-  DUF_process_info(h)
-  
-  
-function h = DUF_cluster_occupancy(h,c)   %% 1st
-  
-  if ~h.status.clusters(c).calc_occupancy
-    h.data.clusters(c).occupancy = zeros(h.data.nSes,1);
-    for s = 1:h.data.nSes
-      h.data.clusters(c).occupancy(s) = length(h.data.clusters(c).session(s).list);
-    end
-    h.data.cluster_ct(c) = nnz(h.data.clusters(c).occupancy);
-    h.plots.clusters(c).thickness = h.data.cluster_ct(c)/h.data.nSes * 3;
-
-    if ~h.data.cluster_ct(c)
-      h = remove_cluster(h,c);
-    end
-    h.status.clusters(c).calc_occupancy = true;
-  end
-  
-  
-function h = DUF_cluster_status(h,c)    %% 2nd
-  
-  if ~h.status.clusters(c).calc_status
-    h.status.cluster_multiROI(c) = any(h.data.clusters(c).occupancy>1); %% multiple ROIs assigned in any session?
-    
-    h.status.cluster_polyROI(c) = false;
-    h.data.clusters(c).polyROI = zeros(h.data.nSes,1);
-    
-    for s = 1:h.data.nSes
-      for i = 1:h.data.clusters(c).occupancy(s)
-        n = h.data.clusters(c).session(s).list(i);
-        polyROI = length(h.data.session(s).ROI(n).cluster_ID);
-        h.data.clusters(c).polyROI(s) = max(h.data.clusters(c).polyROI(s),polyROI);
-        h.status.cluster_polyROI(c) = h.status.cluster_polyROI(c) || polyROI>1;
+    function delete(h,a,b)
+      stop(h.t.timer)
+      delete(h.t.timer)
+      appdata = get(0,'ApplicationData');
+      fname = fieldnames(appdata);
+      for i = 1:numel(fname)
+        rmappdata(0,fname{i})
       end
     end
-    h.status.clusters(c).calc_status = true;
-  end
-  
-  
-function clusters = DUF_cluster_shape(h,clusters,c)   %% 3rd
-  
-  if ~h.status.clusters(c).calc_shape
-    footprints = getappdata(0,'footprints');
     
-    clusters.A = sparse(h.data.imSize(1),h.data.imSize(2));
-    
-    for s = 1:h.data.nSes
-      for i = 1:h.data.clusters(c).occupancy(s)
-        n = h.data.clusters(c).session(s).list(i);
-        clusters.A = clusters.A + footprints.session(s).ROI(n).A;
-      end
+    function update_time(h)
+      
+      h.t.now = toc(h.t.start) + h.t.offset;
+      str = sprintf('Time since start: %d sec.',round(h.t.now));
+      set(h.uihandles.text_time_passed,'String',str)
     end
-    clusters.A = sparse(clusters.A/sum(clusters.A(:)));
-    clusters.centroid = [sum((1:h.data.imSize(1))*clusters.A),sum(clusters.A*(1:h.data.imSize(2))')];
     
-    h.status.clusters(c).calc_shape = true;
-  end
-  
-function [h, clusters] = DUF_cluster_stats(h,clusters,c)    % 4th
-  
-  if ~h.status.clusters(c).calc_stats
+    function set_paths(h)
+      h.path.mouse = get(h.uihandles.entry_data_path,'String');
+      h.path.footprints = pathcat(h.path.mouse,'footprints.mat');
+      h.path.xdata = pathcat(h.path.mouse,'xdata.mat');
+%        h.path.clusters = pathcat(h.path.mouse,'clusters.mat');
+      h.path.results = pathcat(h.path.mouse,'matching_results.mat');
+    end
     
-    xdata = getappdata(0,'xdata');
-    
-    if h.data.cluster_ct(c) > 1
-      %% preparing data
-      width = max(h.data.clusters(c).occupancy);
+    % --- Outputs from this function are returned to the command line.
+    function varargout = ROI_matching_OutputFcn(hObject, eventdata, handles) 
+    % varargout  cell array for returning output args (see VARARGOUT);
+    % hObject    handle to figure
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Get default command line output from handles structure
+      varargout{1} = handles.output;
+    end
+
+    % --- Executes on button press in button_clustering.
+    function button_clustering_Callback(h, hObject, eventdata)
+    % hObject    handle to button_clustering (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      disp('ROI_clustering...')
+      set(h.uihandles.button_clustering,'enable','off')
+      
+      real_matching(h,0.8);
+      
+%        clusters = getappdata(0,'clusters');
+%        h.data.nCluster = length(clusters);
+%        for c = 1:h.data.nCluster
+%          h.clusters(c) = cluster_class(h,clusters(c));
+      
+      
+      h.cluster2handle()
+      
+      h.status.processed = false(h.data.nCluster,1);
+      h.status.unsure = false(h.data.nCluster,1);
+      h.status.merge_cluster = false(h.data.nCluster,1);
+      h.status.split_cluster = false(h.data.nCluster,1);
+      h.status.cluster_manipulated = false(h.data.nCluster,1);
+      
+      h.status.deleted = false(h.data.nCluster,1);
+      h.status.session = struct('deleted',cell(h.data.nSes,1),'visible',cell(h.data.nSes,1),'manipulated',cell(h.data.nSes,1));
+      h.status.manipulate = struct('processed',{},'pre',{},'post',{},'type',{},'c',{});
+      h.status.manipulate_ct = 0;
+      
       for s = 1:h.data.nSes
-        for i = 1:h.data.clusters(c).occupancy(s)
-          clusters.session(s).ROI(i).dist = zeros(h.data.nSes,width);
-          clusters.session(s).ROI(i).corr = zeros(h.data.nSes,width);
-          clusters.session(s).ROI(i).prob = zeros(h.data.nSes,width);
+        h.status.session(s).manipulated = false(h.data.session(s).nROI,1);
+      end
+      
+      for c = 1:h.data.nCluster
+        h.status.clusters(c).merge_ct = 0;
+        h.status.clusters(c).split_ct = 0;
+      end
+      
+      h.plots.cluster_plotted = false(h.data.nCluster,1);
+      
+      h.hwait = waitbar(0,'Loading and processing clusters...');
+      h.init_data();
+      h.init_plot();
+      close(h.hwait)
+      
+      set(h.uihandles.button_save,'enable','on')
+    end
+    
+    
+    function entry_cluster_ID_Callback(h, hObject, eventdata, obj)
+    % hObject    handle to entry_cluster_ID_1 (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = max(1,str2num(get(obj.entry_cluster_ID,'String')));
+      while ~h.status.active(c) || h.status.deleted(c)
+        c = mod(c,h.data.nCluster)+1;
+      end
+      
+      h.choose_cluster(obj,c);
+    end
+    
+    
+    function button_refresh_Callback(h, hObject, eventdata, obj)
+    % hObject    handle to entry_cluster_ID_1 (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      h.plot_cluster(obj,obj.picked.cluster);
+    end
+    
+    
+    %      --- Executes on slider movement.
+    function slider_cluster_ID_Callback(h, hObject, eventdata, obj)
+    % hObject    handle to slider (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = max(1,round(get(hObject, 'Value')));
+      
+      direction = sign(c-obj.picked.cluster);
+      
+      %% find next active
+      while c>h.data.nCluster || c < 1 || ~h.status.active(c) || h.status.deleted(c) || (get(obj.checkbox_cluster_ID_skip_processed,'Value') && h.status.processed(c))
+        if direction > 0
+          c = mod(c,h.data.nCluster)+1;
+        else
+          c = mod(c-2,h.data.nCluster)+1;
         end
       end
       
-      %% writing and calculating stats
-      prob = [];
+      set(hObject, 'Value', c);
+      set(obj.entry_cluster_ID,'String',sprintf('%d',c))
+      
+      h.choose_cluster(obj,c);
+    end
+    
+    
+    function entry_display_session_Callback(h, hObject, eventdata)
+    % hObject    handle to entry_display_session (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hints: get(hObject,'String') returns contents of entry_display_session as text
+    %        str2double(get(hObject,'String')) returns contents of entry_display_session as a double
+      
+      for s = 1:h.data.nSes
+        h.status.session(s).visible = false;
+      end
+      
+      s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
+      if isempty(s_vis)
+        s_vis = 0;
+        set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
+      elseif s_vis
+        h.status.session(s_vis).visible = true;
+        if s_vis == h.data.nSes
+          set(h.uihandles.button_next_session,'enable','off')
+        else
+          set(h.uihandles.button_next_session,'enable','on')
+        end
+        set(h.uihandles.button_prev_session,'enable','on')
+      elseif ~s_vis
+        set(h.uihandles.button_prev_session,'enable','off')
+      end
+      
+      h.display_sessions(h.c_disp.active)
+    end
+      
+      
+%      % --- Executes during object creation, after setting all properties.
+%      function entry_display_session_CreateFcn(hObject, eventdata, h)
+%      % hObject    handle to entry_display_session (see GCBO)
+%      % eventdata  reserved - to be defined in a future version of MATLAB
+%      % handles    empty - handles not created until after all CreateFcns called
+%  
+%      % Hint: edit controls usually have a white background on Windows.
+%      %       See ISPC and COMPUTER.
+%        if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+%            set(hObject,'BackgroundColor','white');
+%        end
+%      end
+      
+
+    % --- Executes on button press in button_prev_session.
+    function button_prev_session_Callback(h, hObject, eventdata)
+    % hObject    handle to button_prev_session (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      %% remove earlier visibility
+      s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
+      if isempty(s_vis)
+        s_vis = 0;
+        for s = 1:h.data.nSes
+          h.status.session(s).visible = false;
+        end
+      else
+        h.status.session(s_vis).visible = false;
+      
+        %% add updated visibility
+        s_vis = s_vis-1;
+      end
+      
+      if s_vis
+        h.status.session(s_vis).visible = true;
+      end
+      set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
+      
+      h.display_sessions(h.c_disp.active)
+      
+      if s_vis == 0
+        set(h.uihandles.button_prev_session,'enable','off')
+      else
+        set(h.uihandles.button_prev_session,'enable','on')
+      end
+      set(h.uihandles.button_next_session,'enable','on')
+    end
+
+
+    % --- Executes on button press in button_next_session.
+    function button_next_session_Callback(h, hObject, eventdata)
+    % hObject    handle to button_next_session (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      %% remove earlier visibility
+      s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
+      if isempty(s_vis)
+        s_vis = 0;
+        for s = 1:h.data.nSes
+          h.status.session(s).visible = false;
+        end
+      else
+        if s_vis
+          h.status.session(s_vis).visible = false;
+        end
+        
+        %% add updated visibility
+        s_vis = s_vis+1;
+      end
+      h.status.session(s_vis).visible = true;
+      
+      set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
+      
+      h.display_sessions(h.c_disp.active)
+      
+      if s_vis == h.data.nSes
+        set(h.uihandles.button_next_session,'enable','off')
+      else
+        set(h.uihandles.button_next_session,'enable','on')
+      end
+      set(h.uihandles.button_prev_session,'enable','on')
+    end
+
+
+    % --- Executes on button press in checkbox_show_all_sessions.
+    function checkbox_show_all_sessions_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_show_all_sessions (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hint: get(hObject,'Value') returns toggle state of checkbox_show_all_sessions
+      
+      if get(hObject,'Value')
+        for s = 1:h.data.nSes
+          h.status.session(s).visible = true;
+        end
+        set(h.uihandles.button_next_session,'enable','off')
+        set(h.uihandles.button_prev_session,'enable','off')
+        set(h.uihandles.entry_display_session,'enable','off')
+      else
+        for s = 1:h.data.nSes
+          h.status.session(s).visible = false;
+        end
+        s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
+        if isempty(s_vis) || ~s_vis
+          s_vis = 0;
+          set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
+        else
+          h.status.session(s_vis).visible = true;
+        end
+        
+        if s_vis < h.data.nSes
+          set(h.uihandles.button_next_session,'enable','on')
+        end
+        
+        if s_vis > 0
+          set(h.uihandles.button_prev_session,'enable','on')
+        end
+        
+        set(h.uihandles.entry_display_session,'enable','on')
+      end
+      
+      h.display_sessions(h.c_disp.active)
+    end
+
+
+%      % --- Executes during object creation, after setting all properties.
+%      function entry_thr_occurence_CreateFcn( hObject, eventdata, handles)
+%      % hObject    handle to entry_thr_occurence (see GCBO)
+%      % eventdata  reserved - to be defined in a future version of MATLAB
+%      % handles    empty - handles not created until after all CreateFcns called
+%  
+%      % Hint: edit controls usually have a white background on Windows.
+%      %       See ISPC and COMPUTER.
+%        if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+%            set(hObject,'BackgroundColor','white');
+%        end
+%      end
+
+
+    % --- Executes on button press in checkbox_rotate3d.
+    function checkbox_rotate3d_Callback(h, hObject, eventdata, rotate_on)
+    % hObject    handle to checkbox_rotate3d (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      r3d = rotate3d(h.c_disp.active.ax_ROI_display);
+      
+      if strcmp(r3d.Enable,'off') || nargin == 4
+        r3d.Enable = 'on';
+        set(r3d,'ButtonDownFilter',@myRotateFilter);    %% kinda ugly, as it maintains the rotate cursor everywhere and rotates other axes as well
+        hManager = uigetmodemanager(h.uihandles.figure1);
+        [hManager.WindowListenerHandles.Enabled] = deal(false);
+        set(h.uihandles.figure1, 'WindowKeyPressFcn', @h.KeyPress_Callback);
+        set(h.uihandles.figure1, 'KeyPressFcn', []);
+        set(hObject,'value',true)
+      else
+        r3d.Enable = 'off';
+        hManager = uigetmodemanager(h.uihandles.figure1);
+        [hManager.WindowListenerHandles.Enabled] = deal(false);
+        set(h.uihandles.figure1, 'WindowKeyPressFcn', @h.KeyPress_Callback);
+        set(h.uihandles.figure1, 'KeyPressFcn', []);
+        set(hObject,'value',false)
+      end
+    end
+      
+      
+    % --- Executes on button press in button_discard_cluster.
+    function button_discard_cluster_Callback(h, hObject, eventdata)
+    % hObject    handle to button_discard_cluster (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      answer = questdlg('Do you really want to remove this cluster?', ...
+      'Removing cluster', ...
+      'Yes','No','No')
+      switch answer
+        case 'No'
+          disp('not removing')
+        case 'Yes'
+          h.remove_cluster(c);
+      end
+      %% update faces and stats
+      
+    end
+
+    % --- Executes on button press in radio_clusterdisplay_2D.
+    function radio_clusterdisplay_2D_3D_Callback(h, hObject, eventdata)
+    % hObject    handle to radio_clusterdisplay_2D (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      if ~isempty(c)
+        h.plot_cluster(h.c_disp.active,c);
+      end
+      
+      if get(h.uihandles.radio_clusterdisplay_2D,'Value')
+        set(h.uihandles.checkbox_rotate3d,'enable','on')
+      else
+        set(h.uihandles.checkbox_rotate3d,'enable','off')
+      end
+    end
+      
+      
+    function entry_ROI_adjacency_Callback(h, hObject, eventdata)
+    % hObject    handle to entry_ROI_adjacency (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      if ~isempty(c)
+        h.plot_cluster(h.c_disp.active,c);
+      end
+    end
+      
+      
+    % --- Executes on button press in radio_clusterstats_dist.
+    function radio_clusterstats_Callback(h, hObject, eventdata)
+    % hObject    handle to radio_clusterstats_dist (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      if ~isempty(c)
+        h.PUF_cluster_stats(h.c_disp.active,c)
+      end
+
+    end
+      
+      
+    % --- Executes on button press in checkbox_filter.
+    function checkbox_filter_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_filter (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hint: get(hObject,'Value') returns toggle state of checkbox_filter
+      
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter1_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter1_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val) || ~filter_active
+        h.apply_filter();
+      end
+    end
+      
+      
+    % --- Executes on selection change in dropdown_filter_type.
+    function dropdown_filter_type_Callback(h, hObject, eventdata)
+    % hObject    handle to dropdown_filter_type (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter1_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter1_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+      
+      if filter_type_val>1 && ~isnan(filter_val)
+        act = 'on';
+      else
+        act = 'off';
+        set(h.uihandles.checkbox_filter,'Value',0)
+      end
+      set(h.uihandles.checkbox_filter,'enable',act)
+      set(h.uihandles.dropdown_filter2_type,'enable',act)
+      set(h.uihandles.dropdown_filter2_ll_gg,'enable',act)
+      set(h.uihandles.entry_filter2_value,'enable',act)
+    end
+      
+      
+%      % --- Executes during object creation, after setting all properties.
+%      function dropdown_filter_type_CreateFcn(hObject, eventdata, h)
+%      % hObject    handle to dropdown_filter_type (see GCBO)
+%      % eventdata  reserved - to be defined in a future version of MATLAB
+%      % handles    empty - handles not created until after all CreateFcns called
+%  
+%      % Hint: popupmenu controls usually have a white background on Windows.
+%      %       See ISPC and COMPUTER.
+%        if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+%            set(hObject,'BackgroundColor','white');
+%        end
+%        
+%      end
+      
+      
+    % --- Executes on selection change in dropdown_filter_ll_gg.
+    function dropdown_filter_ll_gg_Callback(h, hObject, eventdata)
+    % hObject    handle to dropdown_filter_ll_gg (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter1_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter1_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+      
+      if filter_type_val>1 && ~isnan(filter_val)
+        act = 'on';
+      else
+        act = 'off';
+        set(h.uihandles.checkbox_filter,'Value',0)
+      end
+      set(h.uihandles.checkbox_filter,'enable',act)
+      set(h.uihandles.dropdown_filter2_type,'enable',act)
+      set(h.uihandles.dropdown_filter2_ll_gg,'enable',act)
+      set(h.uihandles.entry_filter2_value,'enable',act)
+    end
+      
+      
+%      % --- Executes during object creation, after setting all properties.
+%      function dropdown_filter_ll_gg_CreateFcn(hObject, eventdata, h)
+%      % hObject    handle to dropdown_filter_ll_gg (see GCBO)
+%      % eventdata  reserved - to be defined in a future version of MATLAB
+%      % handles    empty - handles not created until after all CreateFcns called
+%  
+%        if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+%            set(hObject,'BackgroundColor','white');
+%        end
+%        
+%      end
+      
+      
+    function entry_filter_value_Callback(h, hObject, eventdata)
+    % hObject    handle to entry_filter_value (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter1_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter1_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+      
+      if filter_type_val>1 && ~isnan(filter_val)
+        act = 'on';
+      else
+        act = 'off';
+        set(h.uihandles.checkbox_filter,'Value',0)
+      end
+      set(h.uihandles.checkbox_filter,'enable',act)
+      set(h.uihandles.dropdown_filter2_type,'enable',act)
+      set(h.uihandles.dropdown_filter2_ll_gg,'enable',act)
+      set(h.uihandles.entry_filter2_value,'enable',act)
+    end
+      
+      
+    % --- Executes on selection change in dropdown_filter2_ll_gg.
+    function dropdown_filter2_ll_gg_Callback(hObject, eventdata, h)
+    % hObject    handle to dropdown_filter2_ll_gg (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter2_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter2_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+    end
+    
+    
+    
+    function entry_filter2_value_Callback(h, hObject, eventdata)
+    % hObject    handle to entry_filter2_value (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.uihandles.dropdown_filter2_type,'Value');
+      filter_val = str2double(get(h.uihandles.entry_filter2_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+    end
+    
+    
+    
+    % --- Executes on selection change in dropdown_filter2_type.
+    function dropdown_filter2_type_Callback(h, hObject, eventdata)
+    % hObject    handle to dropdown_filter2_type (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      filter_type_val = get(h.dropdown_filter2_type,'Value');
+      filter_val = str2double(get(h.entry_filter2_value,'String'));
+      if filter_active && filter_type_val>1 && ~isnan(filter_val)
+        h.apply_filter();
+      end
+    end
+
+     
+    
+    % --- Executes on selection change in dropdown_filter2_type.
+    function entry_cluster_displayed_Callback(h, hObject, eventdata)
+    % hObject    handle to dropdown_filter2_type (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c_first = str2num(get(h.uihandles.entry_cluster_displayed_first,'String'));
+      c_last = str2num(get(h.uihandles.entry_cluster_displayed_last,'String'));
+      
+      if c_first <= c_last
+        c_plot = 1:h.data.nCluster;
+        c_plot = c_plot >= c_first & c_plot <= c_last;
+        c_not_plot = find(~c_plot);
+        c_plot = find(c_plot);
+        
+        for obj = h.c_disp.c
+          if ismember(obj.picked.cluster,c_not_plot)
+            h.choose_cluster(obj,[])
+          end
+        end
+        
+        h.hwait = waitbar(0,'Plotting clusters...');
+        h.plot_cluster_shape(c_plot,false,true)
+        
+        for c = c_not_plot
+          if h.plots.cluster_plotted(c)
+            delete(h.plots.cluster_handles(c))
+            h.plots.cluster_plotted(c) = false;
+          end
+        end
+        close(h.hwait)
+        
+      end
+      
+      if get(h.uihandles.checkbox_filter,'Value');
+        h.apply_filter();
+      end
+    end
+    
+    
+    
+    % --- Executes on button press in checkbox_processed.
+    function toggle_processed(h, hObject, eventdata, c, val)
+    % hObject    handle to checkbox_processed (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      if nargin < 4
+        c = h.c_disp.active.picked.cluster;
+      end
+      
+      if nargin == 5
+        new_val = val;
+      else
+        new_val = ~h.status.processed(c);
+      end
+      
+      if (h.status.merge_cluster(c) || h.status.split_cluster(c)) && new_val
+        uiwait(msgbox('Cluster cannot be marked as complete, as long as there are manipulations pending!'))
+      elseif h.status.cluster_polyROI(c) && new_val
+        uiwait(msgbox('There are multiassignments in this cluster. Please remove those bevore marking as complete'))
+      else
+        h.status.processed(c) = new_val;
+        h.DUF()
+      end
+      
+      if c == h.c_disp.active.picked.cluster
+        set(h.uihandles.checkbox_processed,'Value',h.status.processed(c))
+      end
+      if h.plots.cluster_plotted(c)
+        set(h.plots.cluster_handles(c),'LineStyle','-','LineWidth',h.plots.clusters(c).thickness)
+        
+        if h.status.processed(c)
+          set(h.plots.cluster_handles(c),'LineStyle',':','LineWidth',1)
+        else
+          set(h.plots.cluster_handles(c),'LineStyle','-','LineWidth',h.plots.clusters(c).thickness)
+        end
+      end
+      
+    end
+    
+    
+    % --- Executes on button press in checkbox_unsure.
+    function checkbox_unsure_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_unsure (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      h.status.unsure(c) = ~h.status.unsure(c);
+      set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c))
+      
+      h.DUF()
+    end
+    
+    
+    % --- Executes on button press in checkbox_unsure.
+    function checkbox_merge_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_unsure (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      h.status.merge_cluster(c) = ~h.status.merge_cluster(c);
+      set(hObject,'Value',h.status.merge_cluster(c))
+      
+    end
+    
+    
+    % --- Executes on button press in checkbox_unsure.
+    function checkbox_split_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_unsure (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      h.status.split_cluster(c) = ~h.status.split_cluster(c);
+      set(hObject,'Value',h.status.split_cluster(c))
+      
+    end
+    
+      
+    % --- Executes on button press in checkbox_ROI_unsure.
+    function checkbox_ROI_unsure_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_ROI_unsure (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      if ~any(isnan(h.c_disp.active.picked.ROI(1)))
+        c = h.c_disp.active.picked.cluster;
+        s = h.c_disp.active.picked.ROI(1);
+        n = h.c_disp.active.picked.ROI(2);
+        
+        idx = find(h.data.clusters(c).session(s).list==n);
+        h.data.clusters(c).session(s).ROI(idx).unsure = ~h.data.clusters(c).session(s).ROI(idx).unsure;
+        clusters(c).session(s).ROI(idx).unsure = h.data.clusters(c).session(s).ROI(idx).unsure;
+        set(h.uihandles.checkbox_ROI_unsure,'Value',h.data.clusters(c).session(s).ROI(idx).unsure)
+      end
+    end
+
+
+    % --- Executes on button press in button_multi_remove_IDs.
+    function button_multi_remove_IDs_Callback(h, hObject, eventdata)
+    % hObject    handle to button_multi_remove_IDs (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      xdata = getappdata(0,'xdata');
+      
+      for s = 1:h.data.nSes
+        for n = h.data.clusters(c).session(s).list
+          h.clear_ID(xdata,c,s,n);
+        end
+      end
+      
+      h.DUF(c,false);
+      h.PUF_assignment_stats(h.c_disp.active,c)
+    end
+
+
+    % --- Executes on button press in button_active_clusters_finished.
+    function button_toggle_active_processed_Callback(h, hObject, eventdata)
+    % hObject    handle to button_active_clusters_finished (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c_disp = h.status.active & h.plots.cluster_plotted;
+      idx = find(c_disp);
+      
+      if all(~h.status.processed(c_disp))
+        for c = idx'
+          set(h.plots.cluster_handles(c),'LineStyle',':','LineWidth',1)
+          h.status.processed(c) = true;
+        end
+        
+      else
+        for c = idx'
+          set(h.plots.cluster_handles(c),'LineStyle','-','LineWidth',h.plots.clusters(c).thickness)
+          h.status.processed(c) = false;
+        end
+        
+      end
+      h.DUF();
+    end
+      
+
+      
+    % --- Executes on button press in radio_plot_to_left.
+    function radio_active_Callback(h, hObject, eventdata)
+    % hObject    handle to radio_plot_to_left (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      for obj = h.c_disp.c
+        set(obj.radio_active,'Value',false)
+      end
+      set(hObject,'Value',true)
+      
+      if eq(h.c_disp.c(1).radio_active,hObject)
+        h.c_disp.active = h.c_disp.c(1);
+      else
+        h.c_disp.active = h.c_disp.c(2);
+      end
+      %% update menu items
+      c = h.c_disp.active.picked.cluster;
+      if ~isempty(c)
+        set(h.uihandles.checkbox_processed,'Value',h.status.processed(c))
+        set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c))
+        set(h.uihandles.checkbox_merge,'Value',h.status.merge_cluster(c))
+        set(h.uihandles.checkbox_split,'Value',h.status.split_cluster(c))
+        set(h.uihandles.checkbox_manipulated,'Value',h.status.cluster_manipulated(c))
+      else
+        set(h.uihandles.checkbox_processed,'Value',false)
+        set(h.uihandles.checkbox_unsure,'Value',false)
+        set(h.uihandles.checkbox_merge,'Value',false)
+        set(h.uihandles.checkbox_split,'Value',false)
+        set(h.uihandles.checkbox_manipulated,'Value',false)
+      end
+    end
+    
+    
+    
+    % --- Executes on button press in button_remove_ROIs.
+    function button_remove_ROIs_Callback(hObject, eventdata, h)
+    % hObject    handle to button_remove_ROIs (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      c = h.c_disp.active.picked.cluster;
+      
+      for s = 1:h.data.nSes
+        for n = h.data.clusters(c).session(s).list
+          h.remove_ROI(s,n)
+        end
+      end
+      
+      h.remove_cluster(c);
+    end
+
+
+    % --- Executes on button press in button_load.
+    function button_load_Callback(h, hObject, eventdata)
+    % hObject    handle to button_load (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      set(hObject,'enable','off')
+      set(h.uihandles.entry_data_path,'enable','off')
+      set(h.uihandles.checkbox_load_processed_data,'enable','off')
+      
+      nSes = 15;
+      footprints = match_loadSessions(h.path.mouse,nSes);
+      setappdata(0,'footprints',footprints)
+      h.data = footprints.data;
+%        footprints.session
+      
+      if ~exist(h.path.xdata,'file')
+        [xdata, histo, para] = match_analyzeData(footprints,h.data.nSes,12);      %% calculate distances and footprint correlation
+        [model,histo] = match_buildModel(xdata,histo,para,h.data.nSes,h.path.mouse);
+      %    [ROC] = estimate_model_accuracy(histo,model,para,pathMouse);
+        
+        %% and assigning probabilities to each (close) pair
+        xdata = match_assign_prob(xdata,h.data,model,para,h.path.xdata);
+      else
+        load(h.path.xdata)
+      end
+      setappdata(0,'xdata',xdata)
+      
+      if get(h.uihandles.checkbox_load_processed_data,'Value') && exist(h.path.results,'file')
+        matching = load(h.path.results);
+        
+        h.data.nCluster = length(matching.clusters_sv);
+        
+        clusters(h.data.nCluster) = struct('A',[],'centroid',[],'score',NaN,'ct',NaN,'session',struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[],'unsure',false)));
+        for c = 1:h.data.nCluster
+          for s = 1:h.data.nSes
+            clusters(c).session(s).list = matching.clusters_sv(c).session(s).list;
+            for i = 1:length(clusters(c).session(s).list)
+              clusters(c).session(s).ROI(i).unsure = matching.clusters_sv(c).session(s).ROI(i).unsure;
+            end
+          end
+        end
+        
+        setappdata(0,'clusters',clusters)
+        
+        h.cluster2handle()
+        
+        h.status.processed = matching.status.processed;
+        h.status.unsure = matching.status.unsure;
+        h.status.merge_cluster = matching.status.merge_cluster;
+        h.status.split_cluster = matching.status.split_cluster;
+        h.status.deleted = matching.status.deleted;
+        
+        for c = 1:h.data.nCluster
+          h.status.clusters(c).merge_ct = matching.status.merge_ct(c);
+          h.status.clusters(c).split_ct = matching.status.split_ct(c);
+        end
+        
+        h.status.session = matching.status.session;
+        h.status.manipulate = matching.status.manipulate;        
+        h.status.manipulate_ct = length(h.status.manipulate);
+        
+        
+        h.hwait = waitbar(0,'Loading and processing clusters...');
+        h.init_data();
+        
+        h.t.offset = matching.status.time;
+        h.t.start = tic;
+        if h.status.manipulate_ct
+          h.update_table()
+        end
+        
+        h.init_plot();
+        close(h.hwait)
+        
+        set(h.uihandles.button_save,'enable','on')
+      else
+        set(h.uihandles.button_clustering,'enable','on')
+      end
+      uiwait(msgbox('loading of data processed'))
+    end
+      
+      
+    % --- Executes on button press in checkbox_load_processed_data.
+    function checkbox_load_processed_data_Callback(h, hObject, eventdata)
+    % hObject    handle to checkbox_load_processed_data (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      disp('none')
+    end
+
+        
+    function entry_data_path_Callback(hObject, eventdata, h)
+    % hObject    handle to entry_data_path (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      h.set_paths()
+    end
+      
+      
+    % --- Executes on button press in button_data_path.
+    function button_data_path_Callback(h, hObject, eventdata)
+    % hObject    handle to button_data_path (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      pathSearch = get(h.uihandles.entry_data_path,'String');
+      pathName = uigetdir(pathSearch,'Choose mouse folder');
+      
+      if ischar(pathName)
+        set(h.uihandles.entry_data_path,'String',pathName)
+        h.set_paths()
+      end
+    end
+      
+      
+    % --- Executes on button press in button_save.
+    function button_save_Callback(h, hObject, eventdata)
+    % hObject    handle to button_save (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      set(hObject,'enable','off')
+      
+      h.t.now = toc(h.t.start);
+      
+      footprints = getappdata(0,'footprints');
+      save(h.path.footprints,'footprints','-v7.3')
+      
+      xdata = getappdata(0,'xdata');
+      save(h.path.xdata,'xdata','-v7.3')
+      
+      clusters = getappdata(0,'clusters');
+      
+      clusters_sv(h.data.nCluster) = struct('session',struct('list',[],'ROI',struct));
+      
+      for c=1:h.data.nCluster
+        for s = 1:h.data.nSes
+          clusters_sv(c).session(s).list = clusters(c).session(s).list;
+          for i = 1:length(clusters(c).session(s).list)
+            clusters_sv(c).session(s).ROI(i).unsure = clusters(c).session(s).ROI(i).unsure;
+          end
+        end
+      end
+      status = struct;
+      status.processed = h.status.processed;
+      status.unsure = h.status.unsure;
+      status.merge_cluster = h.status.merge_cluster;
+      status.split_cluster = h.status.split_cluster;
+      status.cluster_manipulated = h.status.cluster_manipulated;
+      status.merge_ct = [h.status.clusters.merge_ct];
+      status.split_ct = [h.status.clusters.split_ct];
+      
+      status.deleted = h.status.deleted;
+      status.session = h.status.session;
+      status.manipulate = h.status.manipulate;
+      
+      status.time = h.t.now;
+      
+      save(h.path.results,'clusters_sv','status','-v7.3')
+      uiwait(msgbox(sprintf('data saved @ %s',h.path.results)))
+      set(hObject,'enable','on')
+      
+    end
+      
+      
+      
+    % --- Executes on button press in button_process_marked.
+    function button_process_marked_Callback(hObject, eventdata, handles)
+    % hObject    handle to button_process_marked (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      disp('none')
+    end
+      
+      
+    % --- Executes on button press in button_choose_ROIs_done.
+    function button_choose_ROIs_done_Callback(h, hObject, eventdata)
+    % hObject    handle to button_choose_ROIs_done (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      switch h.status.mark
+        case 'merge_pre'
+          c = h.c_disp.active.picked.cluster;
+          
+          idx = h.status.manipulate_ct+1;
+          h.status.manipulate(idx).pre = h.status.picked.markROIs;
+          
+          h.status.mark = 'merge_post';
+          
+          session_filter = 1:h.data.nSes;
+          session_filter(h.status.manipulate(idx).pre(1).ID(1)) = [];
+          
+          h.status.minmax_ROI = [0,1];
+          
+          h.enable_markROI(c,'g','Merging','as new area',session_filter);
+          set(h.uihandles.button_choose_ROIs_done,'enable','on')
+          
+        case 'merge_post'
+          
+          %% check overlap & connection in pre if no post given
+          idx = h.status.manipulate_ct+1;
+          h.status.manipulate(idx).post = h.status.picked.markROIs;
+          
+          h.status.manipulate(idx).type = 'merge';
+          h.status.manipulate(idx).processed = false;
+          
+          if h.check_manipulate(h.status.manipulate(idx))
+            h.status.manipulate_ct = idx;
+            
+            c_arr = [];
+            for i = 1:length(h.status.manipulate(idx).pre)
+              c_arr = [c_arr h.status.manipulate(idx).pre(i).c];
+            end
+            for i = 1:length(h.status.manipulate(idx).post)
+              c_arr = [c_arr h.status.manipulate(idx).post(i).c];
+            end
+            h.status.manipulate(idx).c = unique(c_arr);
+            
+            for c = h.status.manipulate(idx).c
+              h.status.merge_cluster(c) = true;
+              h.toggle_processed([],[],c,false)
+              h.status.clusters(c).merge_ct = h.status.clusters(c).merge_ct + 1;
+            end
+            h.update_table()
+            set(h.uihandles.checkbox_merge,'Value',true)
+            
+          else
+            uiwait(msgbox('chosen candidates for merging do not overlap properly'))
+          end
+          c = h.status.manipulate(idx).pre(1,1)
+          h.button_cancel_menu_Callback([],[],c)
+          
+          
+          set(h.uihandles.button_run_manipulation,'enable','on')
+          
+        case 'split'
+          
+          idx = h.status.manipulate_ct+1;
+          h.status.manipulate(idx).post = h.status.picked.markROIs;
+          
+          h.status.manipulate(idx).type = 'split';
+          h.status.manipulate(idx).processed = false;
+          
+          if h.check_manipulate(h.status.manipulate(idx))
+            h.status.manipulate_ct = idx;
+            
+            c_arr = [];
+            for i = 1:length(h.status.manipulate(idx).pre)
+              c_arr = [c_arr h.status.manipulate(idx).pre(i).c];
+            end
+            for i = 1:length(h.status.manipulate(idx).post)
+              c_arr = [c_arr h.status.manipulate(idx).post(i).c];
+            end
+            h.status.manipulate(idx).c = unique(c_arr);
+            h.update_table()
+            
+            for c = h.status.manipulate(idx).c
+              h.status.split_cluster(c) = true;
+              h.toggle_processed([],[],c,false)
+              h.status.clusters(c).split_ct = h.status.clusters(c).split_ct + 1;
+            end
+            
+            set(h.uihandles.checkbox_split,'Value',true)
+            h.button_cancel_menu_Callback([],[],h.c_disp.active.picked.cluster)
+          else
+            uiwait(msgbox('chosen candidates for splitting do not overlap properly'))
+          end
+          set(h.uihandles.button_run_manipulation,'enable','on')
+      end
+      
+    end
+    
+    
+    function good = check_manipulate(h,test)
+      
+      footprints = getappdata(0,'footprints');
+      good = true;
+      
+      switch h.status.mark
+        case 'merge_post'
+          if isempty(test.post)
+            %% check whether chosen ROIs have at least some overlap
+            s = test.pre(1).ID(1);
+            n = test.pre(1).ID(2);
+            
+            sm = test.pre(2).ID(1);
+            m = test.pre(2).ID(2);
+            
+            if ~nnz(footprints.session(sm).ROI(m).A(find(footprints.session(s).ROI(n).A)))
+              good = false;
+              return
+            end
+            
+          else
+            %% check, whether all pre ROIs have 1w-corr with post > 0.8 or so
+            sm = test.post.ID(1);
+            m = test.post.ID(2);
+            for idx = 1:length(test.pre)
+              s = test.pre(idx).ID(1);
+              n = test.pre(idx).ID(2);
+              
+              if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
+                good = false;
+                return
+              end
+            end
+          end
+          
+        case 'split'
+          sm = test.pre.ID(1);
+          m = test.pre.ID(2);
+          for idx = 1:length(test.post)
+            s = test.post(idx).ID(1);
+            n = test.post(idx).ID(2);
+            
+            if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
+              good = false;
+              return
+            end
+          end
+      end
+    end
+    
+    
+    
+    function update_table(h)
+      
+      table_data = cell(h.status.manipulate_ct,5);
+      if ~h.status.manipulate_ct
+        set(h.uihandles.table_ROI_manipulation,'Visible','off','Data',table_data)
+      else
+        
+        for idx = 1:h.status.manipulate_ct
+          
+          table_data{idx,1} = h.status.manipulate(idx).processed;
+          
+          ROIs_pre = h.status.manipulate(idx).pre;
+          str = '';
+          for c = h.status.manipulate(idx).c
+            str = sprintf('%s %d,',str,c);
+          end
+          str = str(1:end-1);
+          table_data{idx,2} = str;
+          
+          str = '';
+          for i = 1:length(ROIs_pre)
+            str = sprintf('%s%d(%d)',str,ROIs_pre(i).ID(2),ROIs_pre(i).ID(1));
+            if i < length(ROIs_pre)
+              str = sprintf('%s, ',str);
+            end
+          end
+          table_data{idx,3} = str;
+          table_data{idx,4} = h.status.manipulate(idx).type;
+
+          ROIs_post = h.status.manipulate(idx).post;
+
+          switch h.status.manipulate(idx).type
+            case 'merge'
+              if isempty(h.status.manipulate(idx).post)
+                table_data{idx,5} = 'compound';
+              else
+                table_data{idx,5} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
+              end
+            case 'split'
+              if length(h.status.manipulate(idx).post) == 1
+                table_data{idx,5} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
+              else
+                table_data{idx,5} = sprintf('%d(%d), %d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1),ROIs_post(2).ID(2),ROIs_post(2).ID(1));
+              end
+            case 'discard'
+              table_data{idx,5} = '-';
+            case 'add'
+              disp('nothing in here')
+          end
+        end
+        
+        set(h.uihandles.table_ROI_manipulation,'Visible','on','Data',table_data)
+        
+        h.create_table_menu()
+      end
+    end
+    
+    
+    function table_menu_CellSelectionCallback(h,obj,eventdata)
+      
+      h.status.picked.list = eventdata.Indices;
+      
+%        if ~isempty(h.status.picked.list)
+%          table_data = get(h.uihandles.table_ROI_manipulation,'Data');
+%          c = table_data{h.status.picked.list(1),2};
+%          if c~=h.c_disp.active.picked.cluster
+%            h.choose_cluster(h.c_disp.active,c)
+%          end
+%        end
+    end
+    
+    
+    function create_table_menu(h)
+      
+      c = uicontextmenu(h.uihandles.figure1);
+      
+      % Assign the uicontextmenu to the plot
+      set(h.uihandles.table_ROI_manipulation,'UIContextMenu',c)
+      
+      % Create child menu items for the uicontextmenu
+      m1 = uimenu(c,'Label','Remove','Callback',@h.table_menu_remove);
+    end
+    
+    
+    function table_menu_remove(h,obj,event)
+      
+      for c = h.status.manipulate(h.status.picked.list(1)).c
+        switch h.status.manipulate(h.status.picked.list(1)).type
+          case 'merge'
+            h.status.clusters(c).merge_ct = h.status.clusters(c).merge_ct - 1;
+            if ~h.status.clusters(c).merge_ct
+              h.status.merge_cluster(c) = false;
+              if c == h.c_disp.active.picked.cluster
+                set(h.uihandles.checkbox_merge,'Value',false)
+              end
+            end
+          case 'split'
+            h.status.clusters(c).split_ct = h.status.clusters(c).split_ct - 1;
+            if ~h.status.clusters(c).split_ct
+              h.status.split_cluster(c) = false;
+              if c == h.c_disp.active.picked.cluster
+                set(h.uihandles.checkbox_split,'Value',false)
+              end
+            end
+          case 'remove'
+            disp('not yet possible - or how?')
+  %            h.status.merge_cluster(c) = false;
+  %            set(h.uihandles.checkbox_merge,'Value',false)
+        end
+      end
+      h.status.manipulate(h.status.picked.list(1)) = [];
+      h.status.manipulate_ct = length(h.status.manipulate);
+      h.update_table()
+    end
+    
+    
+    
+    function button_cancel_menu_Callback(h, hObject, eventdata, c)
+      
+      obj = h.get_axes(c);
+      
+      set(obj.add_ROI_textbox,'Visible','off','String','')
+      set(h.uihandles.button_choose_ROIs_done,'Visible','off','enable','off')
+      set(h.uihandles.button_cancel_menu,'Visible','off','enable','off')
+      h.disable_markROI([],[],c)
+      h.status.mark = '';
+      
+    end
+
+      
+    %%% -------------------------------------- other functions -------------------------------------%%%
+      
+      
+    function apply_filter(h)
+      
+      filter_active = get(h.uihandles.checkbox_filter,'Value');
+      
+      filter_type_val = get(h.uihandles.dropdown_filter1_type,'Value');
+      filter_type_str = get(h.uihandles.dropdown_filter1_type,'String');
+      filter_type = filter_type_str{filter_type_val};
+      
+      filter_ll_gg_val = get(h.uihandles.dropdown_filter1_ll_gg,'Value');
+      filter_ll_gg_str = get(h.uihandles.dropdown_filter1_ll_gg,'String');
+      filter_ll_gg = filter_ll_gg_str{filter_ll_gg_val};
+      
+      filter_val = str2double(get(h.uihandles.entry_filter1_value,'String'));
+      
+      if filter_active && filter_type_val>1 && ~isempty(filter_val) 
+        
+        filter2_type_val = get(h.uihandles.dropdown_filter2_type,'Value');
+        filter2_type_str = get(h.uihandles.dropdown_filter2_type,'String');
+        filter2_type = filter2_type_str{filter2_type_val};
+        
+        filter2_ll_gg_val = get(h.uihandles.dropdown_filter2_ll_gg,'Value');
+        filter2_ll_gg_str = get(h.uihandles.dropdown_filter2_ll_gg,'String');
+        filter2_ll_gg = filter2_ll_gg_str{filter2_ll_gg_val};
+        
+        filter2_val = str2double(get(h.uihandles.entry_filter2_value,'String'));
+        
+        switch filter_type
+          case 'Session occurence'
+            stats = h.data.cluster_ct;
+          case 'ROI score'
+            stats = h.data.cluster_score;
+          case 'Multi-assignment'
+            stats = h.status.cluster_multiROI;
+          case 'finished process'
+            stats = h.status.processed;
+          case 'Polygamous ROIs'
+            stats = h.status.cluster_polyROI;
+          case 'Tag: "unsure"'
+            stats = h.status.unsure;
+        end
+        
+        switch filter_ll_gg
+          case '<'
+            h.status.active = stats < filter_val & ~h.status.deleted;
+          case '>'
+            h.status.active = stats > filter_val & ~h.status.deleted;
+        end
+        
+        if filter2_type_val>1 && ~isempty(filter2_val)
+          switch filter2_type
+            case 'Session occurence'
+              stats = h.data.cluster_ct;
+            case 'ROI score'
+              stats = h.data.cluster_score;
+            case 'Multi-assignment'
+              stats = h.status.cluster_multiROI;
+            case 'finished process'
+              stats = h.status.processed;
+            case 'Polygamous ROIs'
+              stats = h.status.cluster_polyROI;
+            case 'Tag: "unsure"'
+              stats = h.status.unsure;
+          end
+          
+          switch filter2_ll_gg
+            case '<'
+              h.status.active = h.status.active & stats < filter2_val & ~h.status.deleted;
+            case '>'
+              h.status.active = h.status.active & stats > filter2_val & ~h.status.deleted;
+          end
+        end
+        
+        for obj = h.c_disp.c
+          if ~h.status.active(obj.picked.cluster)
+            h.choose_cluster(obj,[]);
+          end
+        end
+        
+      else
+        h.status.active = ~h.status.deleted;
+      end
+      
+      for c = 1:h.data.nCluster
+        if ~h.status.deleted(c) && h.plots.cluster_plotted(c)
+          if h.status.active(c)
+            set(h.plots.cluster_handles(c),'Visible','on')
+          else
+            set(h.plots.cluster_handles(c),'Visible','off')
+          end
+        end
+      end
+      h.DUF();
+    end
+
+
+
+    function clear_ID(h,xdata,c,s,n)
+      
+      for c_other = setdiff(h.data.session(s).ROI(n).cluster_ID,c)
+        
+        h.toggle_cluster_list([c_other,s,n])
+        
+        obj = h.get_axes(c_other);
+        if ~isempty(obj)
+          h.PUF_ROI_face(obj,[c_other,s,n])
+          h.PUF_assignment_stats(obj,c_other)
+          h.PUF_cluster_textbox(obj,c_other)
+        end
+        
+        if h.plots.cluster_plotted(c_other)
+          delete(h.plots.cluster_handles(c_other))
+          h.plots.cluster_plotted(c_other) = false;
+          if h.data.cluster_ct(c_other)
+            h.plot_cluster_shape(c_other,true)
+            for obj = h.c_disp.c
+              if obj.picked.cluster == c_other
+                set(h.plots.cluster_handles(c_other),'Color','m')
+              end
+            end
+          end
+        end
+        h.toggle_processed([],[],c_other,false)
+      end
+%        h.data.session(s).ROI(n).cluster_ID = c;
+      h.status.clusters(c).calc_status = false;
+      h.DUF(c);
+      
+    end
+      
+      
+    function remove_cluster(h,c)
+      
+      disp(sprintf('Uh oh, cluster %d was stripped of all of its ROIs. Removing!',c))
+      h.toggle_processed([],[],c,false)
+      
+      obj = h.get_axes(c);
+      for s = 1:h.data.nSes
+        for i = 1:length(obj.session(s).ROI_ID)
+          n = obj.session(s).ROI_ID(i);
+          if ismember(n,h.data.clusters(c).session(s).list)
+            h.toggle_cluster_list([c s n]);
+            h.PUF_ROI_face(obj,[c s n]);
+          end
+        end
+      end
+      h.DUF(c,false);
+      h.PUF_cluster(obj,c);
+      
+%        %% remove cluster plot from overview
+%        h.empty_cluster(c)
+    end
+      
+      
+    function empty_cluster(h,c)
+      
+      for s = 1:h.data.nSes
+        for n = h.data.clusters(c).session(s).list
+          h.toggle_cluster_list([c,s,n])
+        end
+      end
+      
+      if isfield(h.plots,'cluster_plotted') && h.plots.cluster_plotted(c)
+        delete(h.plots.cluster_handles(c))
+        h.plots.cluster_plotted(c) = false;
+      end
+      h.status.active(c) = false;
+      h.status.processed(c) = false;
+      if ~h.status.deleted(c)
+        h.status.deleted(c) = true;
+        uiwait(msgbox(sprintf('cluster %d was removed',c)))
+      end
+    end
+
+
+    function obj = get_axes(h,c)
+      
+      if h.c_disp.c(1).picked.cluster == c
+        obj = h.c_disp.c(1);
+      elseif h.c_disp.c(2).picked.cluster == c
+        obj = h.c_disp.c(2);
+      else
+        obj = [];
+      end
+    end
+      
+
+    function find_unsures(h)
+      
+      xdata = getappdata(0,'xdata');
+      
+      for c = 1:h.data.nCluster
+        breakit = false;
+        
+        if ~h.status.deleted(c)
+          
+          for s = 1:h.data.nSes
+            
+            if breakit
+              break
+            end
+            
+            for n = h.data.clusters(c).session(s).list
+              
+              if breakit
+                break
+              end
+              
+              for sm = 1:h.data.nSes
+                if sm==s
+                  continue
+                end
+                m_candidate = find(xdata(s,sm).prob(n,:)>0.8);
+                
+                if ~(isempty(m_candidate) && isempty(h.data.clusters(c).session(sm).list)) && ~all(ismember(m_candidate,h.data.clusters(c).session(sm).list))
+                  
+                  h.status.unsure(c) = true;
+                  breakit = true;
+                  break
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+
+    %%% ---------------------------------- end: other functions ------------------------------------%%%
+
+
+    %%% ------------------------------ start: data updating functions (DUF) ------------------------------%%%
+
+
+    function init_data(h)
+
+%        h.data.nCluster = 200; %% only for testing to restrict number of loaded clusters
+      
+      for obj = h.c_disp.c
+        set(obj.slider_cluster_ID,'Min',0,'Max',h.data.nCluster,'Value',0,'SliderStep',[1/h.data.nCluster, 10/h.data.nCluster])
+      end
+      
+      h.plots.cluster = struct('thickness',cell(h.data.nCluster,1),'color',cell(h.data.nCluster,1));
+      
+      h.data.cluster_ct = zeros(h.data.nCluster,1);
+      h.data.cluster_score = zeros(h.data.nCluster,1);
+      
+      h.status.active = true(h.data.nCluster,1);
+      h.status.cluster_multiROI = false(h.data.nCluster,1);
+      h.status.cluster_polyROI = false(h.data.nCluster,1);
+      
+      for s = 1:h.data.nSes
+        h.status.session(s).visible = true;
+        h.status.session(s).deleted = false(h.data.session(s).nROI,1);
+      end
+      
+      %% first run of updating data for all
+      tic
+      h.DUF_init(1:h.data.nCluster,false,true);
+      toc
+      
+      for c = 1:h.data.nCluster
+        h.status.clusters(c).merge_ct = 0;
+        h.status.clusters(c).split_ct = 0;
+      end
+      
+      disp(sprintf('number of ROI_clusters: %d',h.data.nCluster))
+      disp(sprintf('number of real ROI_clusters: %d',sum(h.data.cluster_ct > 1)))
+      
+      clusters = getappdata(0,'clusters');
+      h.data.cluster_centroids = cat(1,clusters.centroid);
+      
+    end
+
+      
+      
+    %%% ------------------------------- end: data updating functions -------------------------------%%%
+      
+    %%% ------------------------------ start: plot updating functions ----------------------------------%%% 
+
+      
+    function init_plot(h)
+      %%% initial plotting of all clusters
+      tic
+      load('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884/Session01/reduced_MF1_LK1.mat','max_im')
+      imagesc(h.uihandles.ax_cluster_overview,max_im,'Hittest','off')
+      colormap(h.uihandles.ax_cluster_overview,'gray')
+      
+      h.plots.cluster_plotted = false(h.data.nCluster,1);
+      
+      c_plot = 1:h.data.nCluster;
+      c_plot = find(c_plot >= str2num(get(h.uihandles.entry_cluster_displayed_first,'String')) & c_plot <= str2num(get(h.uihandles.entry_cluster_displayed_last,'String')));
+      
+      h.plot_cluster_shape(c_plot,false,true)
+      
+      xlim(h.uihandles.ax_cluster_overview,[1,h.data.imSize(2)])
+      ylim(h.uihandles.ax_cluster_overview,[1,h.data.imSize(1)])
+      
+      set(h.uihandles.ax_cluster_overview,'ButtonDownFcn',@h.ButtonDown_pickCluster,'Hittest','on','PickableParts','All');
+      
+      %% plot overall stats
+      h.plots.histo_ct = histogram(h.uihandles.ax_matchstats1,h.data.cluster_ct(1:h.data.nCluster));
+      xlim(h.uihandles.ax_matchstats1,[0,16])
+      xlabel(h.uihandles.ax_matchstats1,'# Sessions')
+      ylabel(h.uihandles.ax_matchstats1,'# clusters')
+      
+      h.plots.histo_score = histogram(h.uihandles.ax_matchstats2,h.data.cluster_score(1:h.data.nCluster),linspace(0,1,21));
+      xlim(h.uihandles.ax_matchstats2,[0,1])
+      xlabel(h.uihandles.ax_matchstats2,'score')
+      ylabel(h.uihandles.ax_matchstats2,'# clusters')
+      
+      %% set active display
+      h.c_disp.active = h.c_disp.c(1);
+      
+      %% some GUI updates
+      set(h.c_disp.c(1).radio_active,'Value',true)
+      
+      for obj = h.c_disp.c
+        set(obj.entry_cluster_ID,'enable','on')
+      end
+      
+      set(h.uihandles.dropdown_filter1_type,'enable','on')
+      set(h.uihandles.dropdown_filter1_ll_gg,'enable','on')
+      set(h.uihandles.entry_filter1_value,'enable','on')
+      toc
+    end
+    
+    
+    
+    function plot_cluster_shape(h,c_arr,replot,wbar)
+      
+      if nargin < 3
+        replot = true;
+      end
+      
+      clusters = getappdata(0,'clusters');
+      
+      nPlot = length(c_arr);
+      for i = 1:nPlot
+        c = c_arr(i);
+        if h.status.deleted(c)
+          continue
+        end
+        if nargin==4 && wbar && ~mod(i,100)
+          msg = sprintf('Plotted %d/%d clusters',i,nPlot);
+          waitbar((nPlot+i)/(2*nPlot),h.hwait,msg)
+        end
+        
+        if ~h.plots.cluster_plotted(c) || replot
+          if h.status.processed(c)
+            cluster_line = ':';
+            cluster_thickness = 1;
+          else
+            cluster_line = '-';
+            cluster_thickness = h.plots.clusters(c).thickness;
+          end
+          h.plots.cluster_handles(c) = cluster_plot_blobs(h.uihandles.ax_cluster_overview,full(clusters(c).A),[],h.parameter.ROI_thr,cluster_line,h.plots.clusters(c).color,cluster_thickness);
+          h.plots.cluster_plotted(c) = true;
+        end
+      end
+    end
+    
+    
+    
+    function plot_cluster(h,obj,c)
+
+    %    what other methods are there to find bad clusters?
+      
+      %% resetting everything in the plot and on ROI-stats
+      cla(obj.ax_ROI_display)
+      cla(obj.ax_ROI_display_stats)
+      cla(obj.ax_ROI_clusterstats)
+      
+      %% resetting textbox
+      h.display_ROI_info(obj,[]);
+      h.display_ROIstat_info(obj,[],[]);
+      
+      obj.session = [];
+      
+      if ~isempty(c)
+        dist_thr = str2double(get(h.uihandles.entry_ROI_adjacency,'String'));
+        margin = dist_thr + 10;
+        
+        %% getting data
+        footprints = getappdata(0,'footprints');
+        
+        centr = round(h.data.cluster_centroids(c,:));
+        x_lims = [max(1,centr(2)-margin),min(512,centr(2)+margin)];
+        y_lims = [max(1,centr(1)-margin),min(512,centr(1)+margin)];
+        
+        
+        plot_3D = get(h.uihandles.radio_clusterdisplay_3D,'Value');
+        if plot_3D
+          [X,Y] = meshgrid(1:diff(x_lims)+1,1:diff(y_lims)+1);
+        end
+        
+        %% plotting cluster
+        hold(obj.ax_ROI_display,'on')
+        
+        for s = 1:h.data.nSes
+          obj.session(s).ROI_ID = [];
+          for i = 1:h.data.clusters(c).occupancy(s)
+            n = h.data.clusters(c).session(s).list(i);
+            
+            if plot_3D
+              %%% here comes 3D plotting
+              A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
+              A_tmp(A_tmp==0) = NaN;
+              
+              obj.session(s).ROI(i) = surf(obj.ax_ROI_display,X,Y,-2*A_tmp+s);
+            else
+              %%% here comes 2D plotting
+              col = ones(3,1)*4*s/(5.*h.data.nSes);
+              obj.session(s).ROI(i) = cluster_plot_blobs(obj.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'-',col,1);
+            end
+            idx = length(obj.session(s).ROI_ID)+1;
+            obj.session(s).ROI_ID(idx) = n;
+            set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'HitTest','on');
+            h.create_ROI_menu(obj,obj.session(s).ROI(idx),[c s n])
+          end  
+        end
+        
+        
+        %% plotting adjacent, non-cluster ROIs
+        for s = 1:h.data.nSes
+        
+          dist = sqrt(sum((h.data.cluster_centroids(c,1)-footprints.session(s).centroids(:,1)).^2 + (h.data.cluster_centroids(c,2)-footprints.session(s).centroids(:,2)).^2,2));
+          
+          idx_plot = find(dist < dist_thr);
+          idx = h.data.clusters(c).occupancy(s);
+          
+          for n = idx_plot'
+            c_other = h.data.session(s).ROI(n).cluster_ID;
+            if ~ismember(n,h.data.clusters(c).session(s).list) && ~h.data.session(s).ROI(n).removed && ~all(h.status.processed(c_other))
+              idx = idx + 1;
+              
+              if plot_3D
+                A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
+                A_tmp(A_tmp==0) = NaN;
+                
+                obj.session(s).ROI(idx) = surf(obj.ax_ROI_display,X,Y,-2*A_tmp+s,'FaceAlpha',0.4,'EdgeAlpha',0.4);
+              else
+                obj.session(s).ROI(idx) = cluster_plot_blobs(obj.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'--','r',0.75);
+              end
+              set(obj.session(s).ROI(idx),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'HitTest','on');
+              h.create_ROI_menu(obj,obj.session(s).ROI(idx),[c s n])
+              obj.session(s).ROI_ID(idx) = n;
+            end
+          end
+          
+          if ~idx
+            obj.session(s).ROI = [];
+          end
+        end
+        
+        hold(obj.ax_ROI_display,'off')
+        
+        %% overall plot settings
+        if plot_3D
+          view(obj.ax_ROI_display,[15,30])
+          set(obj.ax_ROI_display,'YDir','reverse')
+          set(obj.ax_ROI_display,'ZDir','reverse')
+          zlim(obj.ax_ROI_display,[0,h.data.nSes+1])
+          
+          h.checkbox_rotate3d_Callback(h.uihandles.checkbox_rotate3d,[],true)
+          
+          x_low = floor(x_lims(1)/10)*10;
+          x_high = ceil(x_lims(2)/10)*10;
+          x_steps = (x_high-x_low)/10+1;
+          xtick_arr = linspace(x_low,x_high,x_steps);
+          x0_arr = linspace(x_low - x_lims(1),x_high - x_lims(1),x_steps);
+          
+          y_low = floor(y_lims(1)/10)*10;
+          y_high = ceil(y_lims(2)/10)*10;
+          y_steps = (y_high-y_low)/10+1;
+          ytick_arr = linspace(y_low,y_high,y_steps);
+          y0_arr = linspace(y_low - y_lims(1),y_high - y_lims(1),y_steps);
+          
+          xticks(obj.ax_ROI_display,x0_arr)
+          xticklabels(obj.ax_ROI_display,xtick_arr)
+          xlabel(obj.ax_ROI_display,'x')
+
+          yticks(obj.ax_ROI_display,y0_arr)
+          yticklabels(obj.ax_ROI_display,ytick_arr)
+          ylabel(obj.ax_ROI_display,'y')
+          
+          zlabel(obj.ax_ROI_display,'session')
+          
+          xlim(obj.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
+          ylim(obj.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
+        else
+          rotate3d(obj.ax_ROI_display,'off')
+          set(h.uihandles.checkbox_rotate3d,'Value',0)
+          view(obj.ax_ROI_display,2)
+          xlim(obj.ax_ROI_display,x_lims)
+          ylim(obj.ax_ROI_display,y_lims)
+        end
+        
+        
+        %% adjust visibility of adjacent ROIs
+        h.display_sessions(obj)
+        
+        %% plotting occupation of each session
+        dat = zeros(h.data.nSes,2);
+        obj.session_occ_poly = barh(obj.ax_ROI_display_stats,dat);
+        obj.session_occ_poly(1).FaceColor = 'b';
+        obj.session_occ_poly(2).FaceColor = 'r';
+        
+        xlim(obj.ax_ROI_display_stats,[0,5])
+        set(obj.ax_ROI_display_stats,'YDir','reverse')
+        
+        %% plotting stats
+        h.DUF(c);
+        
+        h.PUF_cluster(obj,c);
+        h.PUF_cluster_textbox(obj,c)
+        
+        set(obj.slider_cluster_ID,'enable','on')
+      else
+        set(obj.slider_cluster_ID,'enable','off')
+      end
+    end
+    
+    
+    
+    function PUF_ROI_face(h,obj,ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      idx = find(obj.session(s).ROI_ID==n);
+      handle = obj.session(s).ROI(idx);
+      
+      if ~ismember(n,h.data.clusters(c).session(s).list)
+        if get(h.uihandles.radio_clusterdisplay_3D,'Value')
+          handle.FaceAlpha = 0.4;
+          handle.EdgeAlpha = 0.4;
+        else
+          handle.LineStyle = '--';
+          handle.Color = 'r';
+        end
+      else
+        if get(h.uihandles.radio_clusterdisplay_3D,'Value')
+          handle.FaceAlpha = 1;
+          handle.EdgeAlpha = 1;
+        else
+          handle.LineStyle = '-';
+          handle.Color = 'k';
+        end
+      end
+    end
+      
+      
+    function PUF_cluster(h,obj,c)
+      
+      h.PUF_cluster_stats(obj,c);
+      
+      h.PUF_cluster_textbox(obj,c)
+      h.PUF_assignment_stats(obj,c)
+    end
+      
+      
+    function PUF_cluster_stats(h,obj,c)  %% updating is more pain than replotting it completely
+      
+      clusters = getappdata(0,'clusters');
+      
+      cla(obj.ax_ROI_clusterstats,'reset')
+      
+      hold(obj.ax_ROI_clusterstats,'on')
       for s = 1:h.data.nSes
         for i = 1:h.data.clusters(c).occupancy(s)
           n = h.data.clusters(c).session(s).list(i);
+          if get(h.uihandles.radio_clusterstats_dist,'Value')
+            obj.session(s).ROI_stat(i) = plot(obj.ax_ROI_clusterstats,s,clusters(c).session(s).ROI(i).mean_dist,'ks','HitTest','off');
+            ylim(obj.ax_ROI_clusterstats,[0 5])
+            ylabel(obj.ax_ROI_clusterstats,'distance')
+          elseif get(h.uihandles.radio_clusterstats_corr,'Value')
+            obj.session(s).ROI_stat(i) = plot(obj.ax_ROI_clusterstats,s,clusters(c).session(s).ROI(i).mean_corr,'ks','HitTest','off');
+            ylim(obj.ax_ROI_clusterstats,[0.5 1])
+            ylabel(obj.ax_ROI_clusterstats,'footprint correlation')
+          elseif get(h.uihandles.radio_clusterstats_prob,'Value')
+            obj.session(s).ROI_stat(i) = plot(obj.ax_ROI_clusterstats,s,clusters(c).session(s).ROI(i).mean_prob,'kS','HitTest','off');
+            ylim(obj.ax_ROI_clusterstats,[0.5 1])
+            ylabel(obj.ax_ROI_clusterstats,'p_{same}')
+          end
+          set(obj.session(s).ROI_stat(i),'ButtonDownFcn',{@h.ButtonDown_pickROIstat,[c s n]},'HitTest','on');
+        end
+      end
+      hold(obj.ax_ROI_clusterstats,'off')
+      xticks(obj.ax_ROI_clusterstats,1:h.data.nSes)
+      xticklabels(obj.ax_ROI_clusterstats,1:h.data.nSes)
+      xlim(obj.ax_ROI_clusterstats,[0,h.data.nSes+1])
+    end
+    
+    
+    
+    function PUF_cluster_textbox(h,obj,c)
+      
+      if ~isempty(c)
+        str = sprintf('cluster %d \nscore: %5.3g',c,h.data.cluster_score(c));
+        set(obj.textbox,'String',str,'Visible','on')
+      else
+        set(obj.textbox,'Visible','off')
+      end
+    end
+      
+      
+    function PUF_assignment_stats(h,obj,c)
+      
+      set(obj.session_occ_poly(1),'YData',h.data.clusters(c).occupancy);
+      set(obj.session_occ_poly(2),'YData',h.data.clusters(c).polyROI);
+      
+    end
+    
+    
+    
+    function display_ROI_info(h,obj,ID)
+      
+      if ~isempty(ID)
+        c = ID(1);
+        s = ID(2);
+        n = ID(3);
+        
+        vis = 'on';
+        
+        %% get cursor position
+        pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
+                        get(gcf, 'Units'), 'Normalized', gcf);
+        
+        height = 0.02*(1+length(h.data.session(s).ROI(n).cluster_ID));
+        pos = [pt(1)+0.01 pt(2)+0.01 0.1 height];
+        
+        %% preparing string
+        str = sprintf('session %d, neuron %d',s,n);
+        for c = h.data.session(s).ROI(n).cluster_ID
+          str = sprintf('%s\n cluster ID: %d',str,c);
+        end
+      else
+        vis = 'off';
+        pos = [0 0 0 0];
+        str = '';
+      end
+      
+      set(obj.ROI_textbox,'String',str,'Position',pos,'Visible',vis)
+    end
+    
+    
+    
+    
+    function display_ROIstat_info(h,obj,hObject,ID)
+      
+      vis_bool = ~isempty(ID);
+      
+      if vis_bool
+        c = ID(1);
+        s = ID(2);
+        n = ID(3);
+      end
+      
+      vis_bool = vis_bool && ~(strcmp(obj.clusterstats_textbox.Visible,'on') && all(obj.picked.ROI_stat == [s n]));
+      textbox_handle = obj.clusterstats_textbox;
+      
+      if ~isempty(ID) && ~any(isnan(obj.picked.ROI))
+        idx = find(obj.session(obj.picked.ROI(1)).ROI_ID==obj.picked.ROI(2));
+        set(obj.session(obj.picked.ROI(1)).ROI(idx),'EdgeColor','k')
+      end
+      
+      if vis_bool
+        vis = 'on';
+        
+        %% get cursor position
+        pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
+                        get(gcf, 'Units'), 'Normalized', gcf);
+        
+        height = 0.02*(1+length(h.data.session(s).ROI(n).cluster_ID));
+        pos = [pt(1)+0.005 pt(2)+0.005 0.15 height];
+        
+        %% preparing string
+        str = sprintf('session %d, neuron %d',s,n);
+        for c = h.data.session(s).ROI(n).cluster_ID
+          str = sprintf('%s\n cluster ID: %d',str,c);
+        end
+        ECol = 'r';
+        
+        obj.picked.ROI_stat = [s n];
           
-          for sm = 1:h.data.nSes
-            for j = 1:h.data.clusters(c).occupancy(sm)
-              m = h.data.clusters(c).session(sm).list(j);
-              
-              if all([s n] == [sm m])
-                continue
-              end
-              clusters.session(s).ROI(i).dist(sm,j) = xdata(s,sm).dist(n,m);
-              clusters.session(s).ROI(i).corr(sm,j) = xdata(s,sm).corr(n,m);
-              clusters.session(s).ROI(i).prob(sm,j) = xdata(s,sm).prob(n,m);
+      else
+        vis = 'off';
+        str = '';
+        pos = [0 0 0 0];
+        ECol = 'k';
+        
+        obj.picked.ROI_stat = [NaN NaN];
+      end
+      set(textbox_handle,'String',str,'Position',pos,'Visible',vis)
+    end
+    
+    
+    
+    function display_sessions(h,obj)
+      
+      c = obj.picked.cluster;
+      
+      for s = 1:h.data.nSes
+        if length(obj.session(s).ROI_ID)
+          if h.status.session(s).visible
+            vis = 'on';
+          else
+            vis = 'off';
+          end
+          for i = 1:length(obj.session(s).ROI_ID)
+            n = obj.session(s).ROI_ID(i);
+            if ~ismember(n,h.data.clusters(c).session(s).list)
+              set(obj.session(s).ROI(i),'Visible',vis)
             end
           end
-          clusters.session(s).ROI(i).mean_dist = sum(clusters.session(s).ROI(i).dist(:))/(sum(h.data.clusters(c).occupancy) - 1);
-          clusters.session(s).ROI(i).mean_corr = sum(clusters.session(s).ROI(i).corr(:))/(sum(h.data.clusters(c).occupancy) - 1);
-          clusters.session(s).ROI(i).mean_prob = sum(clusters.session(s).ROI(i).prob(:))/(sum(h.data.clusters(c).occupancy) - 1);
-          prob = [prob clusters.session(s).ROI(i).mean_prob];
         end
       end
-      
-      cluster_score = mean(prob)^(1+var(prob));
-      h.data.cluster_score(c) = cluster_score;
-      clusters.score = cluster_score;
-      
-      h.plots.clusters(c).color = [1-clusters.score,clusters.score,0];
-      
-    else
-      h.data.cluster_score(c) = NaN;
-      clusters.score = NaN;
-      
-      h.plots.clusters(c).color = [NaN, NaN, NaN];
-    end
-    h.status.clusters(c).calc_stats = true;
-  end
-  
-  
-function DUF_process_info(h)
-  
-  str_active = sprintf('Clusters displayed: %d / %d',nnz(h.status.active),nnz(~h.status.deleted));
-  set(h.text_now_active,'String',str_active)
-  str_completed = sprintf('Clusters completed: %d / %d',nnz(h.status.completed),nnz(~h.status.deleted));
-  set(h.text_now_completed,'String',str_completed)
-  
-  del = 0;
-  for s = 1:h.data.nSes
-    del = del + nnz(h.status.session(s).deleted);
-  end
-  str_deleted = sprintf('ROIs deleted: %d / %d',del,sum([h.data.session.nROI]));
-  set(h.text_now_deleted,'String',str_deleted)
-
-
-  
-  
-%%% ------------------------------- end: data updating functions -------------------------------%%%
-  
-%%% ------------------------------ start: plot updating functions ----------------------------------%%% 
-
-
-
-function [h, ax_handle] = plot_cluster(h,ax_handle,c)
-
-%    what other methods are there to find bad clusters?
-  
-  %% resetting everything in the plot and on ROI-stats
-  cla(ax_handle.ax_ROI_display)
-  cla(ax_handle.ax_ROI_display_stats)
-  cla(ax_handle.ax_clusterstats)
-  
-  %% resetting textbox
-  [h ax_handle] = display_ROI_info(h,ax_handle,[],1,[]);
-  [h ax_handle] = display_ROI_info(h,ax_handle,[],2,[]);
-  
-  ax_handle.session = [];
-  
-  if ~isempty(c)
-    dist_thr = str2double(get(h.entry_ROI_adjacency,'String'));
-    margin = dist_thr + 10;
-    
-    %% getting data
-    footprints = getappdata(0,'footprints');
-    
-    centr = round(h.data.cluster_centroids(c,:));
-    x_lims = [max(1,centr(2)-margin),min(512,centr(2)+margin)];
-    y_lims = [max(1,centr(1)-margin),min(512,centr(1)+margin)];
-    
-    
-    plot_3D = get(h.radio_clusterdisplay_3D,'Value');
-    if plot_3D
-      [X,Y] = meshgrid(1:diff(x_lims)+1,1:diff(y_lims)+1);
     end
     
-    %% plotting cluster
-    hold(ax_handle.ax_ROI_display,'on')
-    
-    for s = 1:h.data.nSes
-      ax_handle.session(s).ROI_ID = [];
-      for i = 1:h.data.clusters(c).occupancy(s)
-        n = h.data.clusters(c).session(s).list(i);
+%%% -------------------------------- end: plot updating functions --------------------------------%%% 
+
+%%% --------------------------------start: GUI interaction functions -----------------------------%%%
+      
+    function ButtonDown_pickROI(h, hObject, eventdata, obj, ID)
+      
+    % ID contains: (c,s,n)
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      t = toc(h.dblclick);
+      
+      f = hObject.Parent.Parent;
+      if ~strcmp(f.SelectionType, 'alt')
         
-        if plot_3D
-          %%% here comes 3D plotting
-          A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
-          A_tmp(A_tmp==0) = NaN;
-          
-          ax_handle.session(s).ROI(i) = surf(ax_handle.ax_ROI_display,X,Y,-2*A_tmp+s);
+        if t < 0.4   %% doubleclick (not on clusterstats)
+          h.toggle_belong(hObject, eventdata, obj, ID);
+          h.dblclick = tic-2; %% disable double click trigger for next click
         else
-          %%% here comes 2D plotting
-          col = ones(3,1)*4*s/(5.*h.data.nSes);
-          ax_handle.session(s).ROI(i) = cluster_plot_blobs(ax_handle.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'-',col,1);
+          h.toggle_picked_ROI(obj, hObject, ID);
+          h.dblclick = tic;
         end
-        idx = length(ax_handle.session(s).ROI_ID)+1;
-        ax_handle.session(s).ROI_ID(idx) = n;
-        set(ax_handle.session(s).ROI(i),'ButtonDownFcn',{@click_ROI,[c s n],1},'HitTest','on');
-        create_ROI_menu(h,ax_handle.session(s).ROI(idx),[c s n])
-      end  
-    end
-    
-    
-    %% plotting adjacent, non-cluster ROIs
-    for s = 1:h.data.nSes
-    
-      dist = sqrt(sum((h.data.cluster_centroids(c,1)-footprints.session(s).centroids(:,1)).^2 + (h.data.cluster_centroids(c,2)-footprints.session(s).centroids(:,2)).^2,2));
-      
-      idx_plot = find(dist < dist_thr);
-      idx = h.data.clusters(c).occupancy(s);
-      
-      for n = idx_plot'
-        if ~ismember(n,h.data.clusters(c).session(s).list)
-          idx = idx + 1;
-          
-          if plot_3D
-            A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
-            A_tmp(A_tmp==0) = NaN;
-            
-            ax_handle.session(s).ROI(idx) = surf(ax_handle.ax_ROI_display,X,Y,-2*A_tmp+s,'FaceAlpha',0.4,'EdgeAlpha',0.4);
-          else
-            ax_handle.session(s).ROI(idx) = cluster_plot_blobs(ax_handle.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'--','r',0.75);
-          end
-          set(ax_handle.session(s).ROI(idx),'ButtonDownFcn',{@click_ROI,[c s n],1},'HitTest','on');
-          create_ROI_menu(h,ax_handle.session(s).ROI(idx),[c s n])
-          ax_handle.session(s).ROI_ID(idx) = n;
-        end
-      end
-      
-      if ~idx
-        ax_handle.session(s).ROI = [];
-      end
-    end
-    
-    hold(ax_handle.ax_ROI_display,'off')
-    
-    %% overall plot settings
-    if plot_3D
-      view(ax_handle.ax_ROI_display,[-165,30])
-      r3d = rotate3d(ax_handle.ax_ROI_display);
-      r3d.Enable = 'on';
-      zlim(ax_handle.ax_ROI_display,[0,h.data.nSes+1])
-      set(ax_handle.ax_ROI_display,'ZDir','reverse')
-      set(r3d,'ButtonDownFilter',@myRotateFilter);    %% kinda ugly, as it maintains the rotate cursor everywhere and rotates other axes as well
-      
-      
-      x_low = floor(x_lims(1)/10)*10;
-      x_high = ceil(x_lims(2)/10)*10;
-      x_steps = (x_high-x_low)/10+1;
-      xtick_arr = linspace(x_low,x_high,x_steps);
-      x0_arr = linspace(x_low - x_lims(1),x_high - x_lims(1),x_steps);
-      
-      y_low = floor(y_lims(1)/10)*10;
-      y_high = ceil(y_lims(2)/10)*10;
-      y_steps = (y_high-y_low)/10+1;
-      ytick_arr = linspace(y_low,y_high,y_steps);
-      y0_arr = linspace(y_low - y_lims(1),y_high - y_lims(1),y_steps);
-      
-      xticks(ax_handle.ax_ROI_display,x0_arr)
-      xticklabels(ax_handle.ax_ROI_display,xtick_arr)
-
-      yticks(ax_handle.ax_ROI_display,y0_arr)
-      yticklabels(ax_handle.ax_ROI_display,ytick_arr)
-      
-      xlim(ax_handle.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
-      ylim(ax_handle.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
-      set(h.checkbox_rotate3d,'Value',1)
-    else
-      rotate3d(ax_handle.ax_ROI_display,'off')
-      set(h.checkbox_rotate3d,'Value',0)
-      view(ax_handle.ax_ROI_display,2)
-      xlim(ax_handle.ax_ROI_display,x_lims)
-      ylim(ax_handle.ax_ROI_display,y_lims)
-    end
-    
-    
-    %% adjust visibility of adjacent ROIs
-    display_sessions(h,ax_handle)
-    
-    %% plotting occupation of each session
-    dat = zeros(h.data.nSes,2);
-    ax_handle.session_occ_poly = barh(ax_handle.ax_ROI_display_stats,dat);
-    ax_handle.session_occ_poly(1).FaceColor = 'b';
-    ax_handle.session_occ_poly(2).FaceColor = 'r';
-    
-    xlim(ax_handle.ax_ROI_display_stats,[0,5])
-    set(ax_handle.ax_ROI_display_stats,'YDir','reverse')
-    
-    %% plotting stats
-    h = DUF(h,c);
-    clusters = getappdata(0,'clusters');
-    
-    ax_handle = PUF_cluster_stats(h,ax_handle,clusters(c),c);
-    PUF_assignment_stats(h,ax_handle,c)
-    
-    set(ax_handle.slider,'enable','on')
-    
-  else
-    set(ax_handle.slider,'enable','off')
-  end
-
-
-function ax_handle = PUF_cluster_stats(h,ax_handle,clusters,c)  %% updating is more pain than replotting it completely
-  
-  cla(ax_handle.ax_clusterstats,'reset')
-  
-  hold(ax_handle.ax_clusterstats,'on')
-  for s = 1:h.data.nSes
-    for i = 1:h.data.clusters(c).occupancy(s)
-      n = h.data.clusters(c).session(s).list(i);
-      if get(h.radio_clusterstats_dist,'Value')
-        ax_handle.session(s).ROI_stat(i) = plot(ax_handle.ax_clusterstats,s,clusters.session(s).ROI(i).mean_dist,'ks','HitTest','off');
-        ylim(ax_handle.ax_clusterstats,[0 5])
-        ylabel(ax_handle.ax_clusterstats,'distance')
-      elseif get(h.radio_clusterstats_corr,'Value')
-        ax_handle.session(s).ROI_stat(i) = plot(ax_handle.ax_clusterstats,s,clusters.session(s).ROI(i).mean_corr,'ks','HitTest','off');
-        ylim(ax_handle.ax_clusterstats,[0.5 1])
-        ylabel(ax_handle.ax_clusterstats,'footprint correlation')
-      elseif get(h.radio_clusterstats_prob,'Value')
-        ax_handle.session(s).ROI_stat(i) = plot(ax_handle.ax_clusterstats,s,clusters.session(s).ROI(i).mean_prob,'kS','HitTest','off');
-        ylim(ax_handle.ax_clusterstats,[0.5 1])
-        ylabel(ax_handle.ax_clusterstats,'p_{same}')
-      end
-      set(ax_handle.session(s).ROI_stat(i),'ButtonDownFcn',{@click_ROI,[c s n],2},'HitTest','on');
-    end
-  end
-  hold(ax_handle.ax_clusterstats,'off')
-  xticks(ax_handle.ax_clusterstats,1:h.data.nSes)
-  xticklabels(ax_handle.ax_clusterstats,1:h.data.nSes)
-  xlim(ax_handle.ax_clusterstats,[0,h.data.nSes+1])
-  
-  
-  
-function PUF_assignment_stats(h,ax_handle,c)
-  set(ax_handle.session_occ_poly(1),'YData',h.data.clusters(c).occupancy);
-  set(ax_handle.session_occ_poly(2),'YData',h.data.clusters(c).polyROI);
-  
-  
-  
-function [h ax_handle] = display_ROI_info(h,ax_handle,hObject,ax_ID,ID)
-  
-  vis_bool = ~isempty(ID);
-  
-  if vis_bool
-    c = ID(1);
-    s = ID(2);
-    n = ID(3);
-  end
-  
-  if ax_ID == 1       %% ROI_ax
-    vis_bool = vis_bool && ~(strcmp(ax_handle.ROI_textbox.Visible,'on') && all(ax_handle.picked.ROI == [s n]));
-    textbox_handle = ax_handle.ROI_textbox;
-  elseif ax_ID == 2   %% clusterstats
-    vis_bool = vis_bool && ~(strcmp(ax_handle.clusterstats_textbox.Visible,'on') && all(ax_handle.picked.ROI_stat == [s n]));
-    textbox_handle = ax_handle.clusterstats_textbox;
-  end
-  
-  if ~isempty(ID) && ~any(isnan(ax_handle.picked.ROI))
-    idx = find(ax_handle.session(ax_handle.picked.ROI(1)).ROI_ID==ax_handle.picked.ROI(2));
-    set(ax_handle.session(ax_handle.picked.ROI(1)).ROI(idx),'EdgeColor','k')
-  end
-  
-  if vis_bool
-    vis = 'on';
-    
-    %% get cursor position
-    pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
-                    get(gcf, 'Units'), 'Normalized', gcf);
-    
-    height = 0.02*(1+length(h.data.session(s).ROI(n).cluster_ID));
-    pos = [pt(1)+0.005 pt(2)+0.005 0.15 height];
-    
-    %% preparing string
-    str = sprintf('session %d, neuron %d',s,n);
-    for c = h.data.session(s).ROI(n).cluster_ID
-      str = sprintf('%s\n cluster ID: %d',str,c);
-    end
-    ECol = 'r';
-    
-    if ax_ID == 1
-      ax_handle.picked.ROI = [s n];
-    elseif ax_ID == 2
-      ax_handle.picked.ROI_stat = [s n];
-    end
-      
-  else
-    vis = 'off';
-    str = '';
-    pos = [0 0 0 0];
-    ECol = 'k';
-    
-    if ax_ID == 1
-      ax_handle.picked.ROI = [NaN NaN];
-    elseif ax_ID == 2
-      ax_handle.picked.ROI_stat = [NaN NaN];
-    end
-  end
-  set(textbox_handle,'String',str,'Position',pos,'Visible',vis)
-  
-  if ~isempty(hObject) && ax_ID == 1
-    set(hObject,'EdgeColor',ECol)
-  end
-  
-
-
-
-function PUF_match_stats(h)
-  set(h.plots.histo_ct,'Data',h.data.cluster_ct(1:h.data.nCluster))
-  set(h.plots.histo_score,'Data',h.data.cluster_score(1:h.data.nCluster))
-  
-  
-
-function PUF_cluster_textbox(h,ax_handle,c)
-  
-  if ~isempty(c)
-    str = sprintf('cluster %d \nscore: %5.3g',c,h.data.cluster_score(c));
-    set(ax_handle.textbox,'String',str,'Visible','on')
-  else
-    set(ax_handle.textbox,'Visible','off')
-  end
-  
-  
-  
-function PUF_ROI_face(h,ax_handle,ID)
-  
-  c = ID(1);
-  s = ID(2);
-  n = ID(3);
-  
-  idx = find(ax_handle.session(s).ROI_ID==n);
-  handle = ax_handle.session(s).ROI(idx);
-  
-  if ~ismember(n,h.data.clusters(c).session(s).list)
-    if get(h.radio_clusterdisplay_3D,'Value')
-      handle.FaceAlpha = 0.4;
-      handle.EdgeAlpha = 0.4;
-    else
-      handle.LineStyle = '--';
-      handle.Color = 'r';
-    end
-  else
-    if get(h.radio_clusterdisplay_3D,'Value')
-      handle.FaceAlpha = 1;
-      handle.EdgeAlpha = 1;
-    else
-      handle.LineStyle = '-';
-      handle.Color = 'k';
-    end
-  end
-  
-  
-  
-  
-%%% ------------------------------ end: plot updating functions --------------------------------%%% 
-
-%%% -------------------------------- start: ROI menu functions ---------------------------------%%%
-
-
-function create_ROI_menu(h,face_handle,ID,side)
-  
-  c = uicontextmenu;
-  
-  % Assign the uicontextmenu to the plot
-  set(face_handle,'UIContextMenu',c)
-  
-  % Create child menu items for the uicontextmenu
-  m1 = uimenu(c,'Label','Toggle belong','Callback',{@toggle_belong,ID,face_handle});
-  m2 = uimenu(c,'Label','Display other IDs','Callback',{@menu_plot_other_ID,ID});
-  m3 = uimenu(c,'Label','Remove other IDs','Callback',{@menu_clear_ROI_ID,ID});
-  m4 = uimenu(c,'Label','Mark as unsure','Callback',{@menu_remove_ROI,ID});
-  m5 = uimenu(c,'Label','Mark for merging','Callback',[]);
-  m6 = uimenu(c,'Label','Mark for splitting','Callback',[]);
-  m7 = uimenu(c,'Label','Remove ROI','Callback',[]);
-  
-
-function toggle_belong(hObject,eventdata,ID,face_handle)
-  
-  if nargin == 4
-    hObject = face_handle;
-  end
-  h = guidata(hObject);
-  
-  c = ID(1);
-  s = ID(2);
-  n = ID(3);
-  
-  clusters = getappdata(0,'clusters');
-  %% data update
-  idx = find(h.data.clusters(c).session(s).list==n);
-  if ~isempty(idx)  %% removing ROI from cluster
-    clusters(c).session(s).list(idx) = [];
-    h.data.clusters(c).session(s).list(idx) = [];
-    
-    idx = find(h.data.session(s).ROI(n).cluster_ID==c);
-    h.data.session(s).ROI(n).cluster_ID(idx) = [];
-  else
-    idx = h.data.clusters(c).occupancy(s)+1;
-    clusters(c).session(s).list(idx) = n;
-    h.data.clusters(c).session(s).list(idx) = n;
-    
-    idx = length(h.data.session(s).ROI(n).cluster_ID) + 1;
-    h.data.session(s).ROI(n).cluster_ID(idx) = c;
-  end
-  setappdata(0,'clusters',clusters)
-  
-  h = DUF(h,c,false);
-  clusters = getappdata(0,'clusters');
-  
-  ax_handle = get_axes(h,c);
-  
-  %% statistics update
-  PUF_ROI_face(h,ax_handle,ID)
-  ax_handle = PUF_cluster_stats(h,ax_handle,clusters(c),c);
-  PUF_assignment_stats(h,ax_handle,c)
-  PUF_match_stats(h)
-  PUF_cluster_textbox(h,ax_handle,c)
-  [h ax_handle] = display_ROI_info(h,ax_handle,hObject,1,ID);
-  
-  if h.data.cluster_ct
-    delete(h.plots.cluster_handles(c))
-    h.plots.cluster_handles(c) = cluster_plot_blobs(h.ax_cluster_display,full(clusters(c).A),[],h.parameter.ROI_thr,'-','m',h.plots.clusters(c).thickness);
-  else
-    ax_handle.picked.cluster = [];
-  end
-  
-  if eq(hObject.Parent,h.plots.c1.ax_ROI_display) || eq(hObject.Parent,h.plots.c1.ax_clusterstats)
-    h.plots.c1 = ax_handle;
-  else
-    h.plots.c2 = ax_handle;
-  end
-  
-  for c_other = setdiff(h.data.session(s).ROI(n).cluster_ID,c)
-    h.status.clusters(c_other).calc_occupancy = false;
-    h.status.clusters(c_other).calc_status = false;
-    h = DUF(h,c_other);
-    if h.plots.c1.picked.cluster == c_other
-      PUF_assignment_stats(h,h.plots.c1,c_other)
-      PUF_ROI_face(h,h.plots.c1,[c_other,s,n])
-    elseif h.plots.c2.picked.cluster == c_other
-      PUF_assignment_stats(h,h.plots.c2,c_other)
-      PUF_ROI_face(h,h.plots.c2,[c_other,s,n])
-    end
-  end
-  
-  guidata(hObject,h)
-  
-  
-%    if ismember(n,clusters.ROIs(c).list(s,:))  %% removing ROI from cluster
-    
-%    else
-    
-%    end
-    
-    %% graphical update
-    %%% in ROI_display
-    
-    %%% in cluster_display
-    
-    %%% in clusterstats_display
-    
-
-function menu_plot_other_ID(hObject,eventdata,ID)
-  
-  c = ID(1);
-  s = ID(2);
-  n = ID(3);
-  
-  h = guidata(hObject);
-  
-  %% find axis to plot to
-  if h.plots.c1.picked.cluster == c
-    side = 'right';
-  else
-    side = 'left';
-  end
-  
-  c_new = setdiff(h.data.session(s).ROI(n).cluster_ID,c);
-  if length(c_new) > 1
-    uiwait(msgbox('more than 1 candidate to be plotted - allow choosing from UI'))
-  else
-    h = choose_cluster(h,c_new,side);
-  end
-  guidata(hObject,h)
-  
-  
-
-function menu_clear_ROI_ID(hObject,eventdata,ID)
-  
-  c = ID(1);
-  s = ID(2);
-  n = ID(3);
-  
-  h = guidata(hObject);
-  
-  xdata = getappdata(0,'xdata');
-  h = clear_ID(h,xdata,c,s,n);
-  
-  h = DUF_cluster_status(h,c);
-  PUF_assignment_stats(h,get_axes(h,c),c)
-  
-  guidata(hObject,h)
-
-
-function menu_remove_ROI(hObject,eventdata,ID)
-  
-  s = ID(2);
-  n = ID(3);
-  
-  h = guidata(hObject);
-  h = remove_ROI(h,s,n)
-  guidata(hObject,h)
-  
-
-
-
-function h = remove_ROI(h,s,n)
-  
-  h.status.session(s).deleted(n) = true;
-  clusters = getappdata(0,'clusters');
-  %% disengage from all clusters
-  for c = h.data.session(s).ROI(n).cluster_ID
-    clusters(c).session(s).list = setdiff(clusters(c).session(s).list,c);
-    h.data.clusters(c).session(s).list = setdiff(h.data.clusters(c).session(s).list,c);
-  end
-  setappdata(0,'clusters',clusters)
-  
-  %% disable visibility (removing centroid)
-  footprints = getappdata(0,'footprints');
-  footprints.session(s).centroids(n,:) = [NaN NaN];
-  setappdata(0,'footprints',footprints);
-  
-  %% update stats and plots
-  
-%%% ----------------------------------- clustering functions --------------------------------%%%
-
-
-function pre_clustering(h)
-  
-  appdata = get(0,'ApplicationData');
-  
-  if ~isfield(appdata,'pre_clusters')
-  
-    xdata = getappdata(0,'xdata');
-    
-    registered = struct('session',struct);
-    clusters = struct('ID',[]);
-    
-    session = struct;
-    for s = 1:h.data.nSes
-      registered.session(s).neuron = false(h.data.session(s).nROI,1);
-      session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1),'matched',cell(h.data.session(s).nROI,1));
-    end
-    
-    nCluster = 0;
-    
-    tic
-    for s = 1:h.data.nSes
-      for sm = 1:h.data.nSes
         
-        for n = 1:h.data.session(s).nROI
-          if sm == s
-            session(s).ROI(n).matched = false;
+      end
+    end
+      
+      
+    function ButtonDown_pickROIstat(h, hObject, eventdata, obj, ID)
+      
+    % ID contains: (c,s,n)
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      t = toc(h.dblclick);
+      
+      f = hObject.Parent.Parent;
+      if ~strcmp(f.SelectionType, 'alt')
+        
+        h.display_ROIstat_info(h.c_disp.active,hObject,ID);
+        h.dblclick = tic;
+      end
+    end
+      
+      
+    function ButtonDown_markROIs(h,hObject,eventdata,ID,col)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      obj = h.get_axes(c);
+      
+      if ~isempty(h.status.picked.markROIs)
+        
+        for idx_list = 1:length(h.status.picked.markROIs)
+          idx_bool = ismember([s n],h.status.picked.markROIs(idx_list).ID,'rows');
+          if idx_bool
+            break
+          end
+        end
+        
+        if idx_bool     %% reset earlier picked ROI
+          h.status.picked.markROIs(idx_list) = [];
+          
+          idx = find(obj.session(s).ROI_ID==n);
+          set(obj.session(s).ROI(idx),'EdgeColor','k')
+        elseif length(h.status.picked.markROIs)>=h.status.minmax_ROI(2)
+          %% reset appearance of removed ROI
+          sm = h.status.picked.markROIs(h.status.minmax_ROI(2)).ID(1);
+          m = h.status.picked.markROIs(h.status.minmax_ROI(2)).ID(2);
+          idx = find(obj.session(sm).ROI_ID==m);
+          set(obj.session(sm).ROI(idx),'EdgeColor','k')
+          
+          h.status.picked.markROIs(h.status.minmax_ROI(2)).c = h.data.session(s).ROI(n).cluster_ID;
+          h.status.picked.markROIs(h.status.minmax_ROI(2)).ID = [s n];
+          set(hObject,'EdgeColor',col)
+        else
+          idx = length(h.status.picked.markROIs) + 1;
+          h.status.picked.markROIs(idx).c = h.data.session(s).ROI(n).cluster_ID;
+          h.status.picked.markROIs(idx).ID = [s n];
+          set(hObject,'EdgeColor',col)
+        end
+      else
+        h.status.picked.markROIs(1).c = h.data.session(s).ROI(n).cluster_ID;
+        h.status.picked.markROIs(1).ID = [s n];
+        set(hObject,'EdgeColor',col)
+      end
+      
+      str = '';
+      for i = 1:length(h.status.picked.markROIs)
+        str = sprintf('%s\nROI #%d: %d (%d) ',str,i,h.status.picked.markROIs(i).ID(2),h.status.picked.markROIs(i).ID(1));
+      end
+      
+      set(obj.add_ROI_textbox,'String',sprintf('%s%s',h.status.markROIs_str,str))
+      
+      if length(h.status.picked.markROIs) >= h.status.minmax_ROI(1)
+        set(h.uihandles.button_choose_ROIs_done,'enable','on')
+      else
+        set(h.uihandles.button_choose_ROIs_done,'enable','off')
+      end
+      
+    end
+    
+    
+    
+    function ButtonDown_pickCluster(h,hObject,eventdata)
+
+      coords = get(hObject,'CurrentPoint');
+      
+      [min_val c_idx] = min(sum((h.data.cluster_centroids(h.status.active & h.plots.cluster_plotted,1)-coords(1,2)).^2 + (h.data.cluster_centroids(h.status.active & h.plots.cluster_plotted,2)-coords(1,1)).^2,2));
+      idxes = find(h.status.active & h.plots.cluster_plotted);
+      c = idxes(c_idx);
+      
+      if sqrt(min_val) < 10
+        pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
+                        get(gcf, 'Units'), 'Normalized', gcf);
+        if c == h.c_disp.active.picked.cluster
+          c = [];
+        end
+        h.choose_cluster(h.c_disp.active,c);
+      end
+    end
+
+
+
+    function KeyPress_Callback(h, hObject, eventdata)
+      
+      c = h.c_disp.active.picked.cluster;
+      switch eventdata.Key
+        case 'u'
+          if ~any(isnan(h.c_disp.active.picked.ROI))
+            h.checkbox_ROI_unsure_Callback(h.uihandles.checkbox_ROI_unsure,[])
+          else
+            h.checkbox_unsure_Callback(h.uihandles.checkbox_unsure,[])
+          end
+        case 'c'
+          h.toggle_processed([],[],c)
+        case 'r'
+          h.checkbox_rotate3d_Callback(h.uihandles.checkbox_rotate3d,[])
+        case 'm'
+          if ~any(isnan(h.c_disp.active.picked.ROI))
+            s = h.c_disp.active.picked.ROI(1);
+            n = h.c_disp.active.picked.ROI(2);
+            ID = [c s n];
+            idx = find(h.c_disp.active.session(s).ROI_ID == n);
+            face_handle = h.c_disp.active.session(s).ROI(idx);
+            menu_merging(h, [], [], h.c_disp.active, ID, face_handle)
+          end
+        case 's'
+          if ~any(isnan(h.c_disp.active.picked.ROI))
+            s = h.c_disp.active.picked.ROI(1);
+            n = h.c_disp.active.picked.ROI(2);
+            ID = [c s n];
+            idx = find(h.c_disp.active.session(s).ROI_ID == n);
+            face_handle = h.c_disp.active.session(s).ROI(idx);
+            menu_splitting(h, [], [], h.c_disp.active, ID, face_handle)
+          end
+        case 't'
+          if ~any(isnan(h.c_disp.active.picked.ROI))
+            s = h.c_disp.active.picked.ROI(1);
+            n = h.c_disp.active.picked.ROI(2);
+            ID = [c s n];
+            idx = find(h.c_disp.active.session(s).ROI_ID == n);
+            face_handle = h.c_disp.active.session(s).ROI(idx);
+            h.toggle_belong([], [], h.c_disp.active, ID, face_handle);
+          end
+        case 'rightarrow'
+          set(h.c_disp.active.slider_cluster_ID,'Value',c+1)
+          h.slider_cluster_ID_Callback(h.c_disp.active.slider_cluster_ID,[],h.c_disp.active)
+        case 'leftarrow'
+          set(h.c_disp.active.slider_cluster_ID,'Value',c-1)
+          h.slider_cluster_ID_Callback(h.c_disp.active.slider_cluster_ID,[],h.c_disp.active)
+        case 'uparrow'
+          if get(h.uihandles.checkbox_show_all_sessions,'Value')
+            set(h.uihandles.checkbox_show_all_sessions,'Value',false)
+            h.checkbox_show_all_sessions_Callback(h.uihandles.checkbox_show_all_sessions,[])
+          elseif str2num(get(h.uihandles.entry_display_session,'String'))
+            h.button_prev_session_Callback([],[])
+          end
+        case 'downarrow'
+          if get(h.uihandles.checkbox_show_all_sessions,'Value')
+            set(h.uihandles.checkbox_show_all_sessions,'Value',false)
+            h.checkbox_show_all_sessions_Callback(h.uihandles.checkbox_show_all_sessions,[])
+          elseif str2num(get(h.uihandles.entry_display_session,'String'))<h.data.nSes
+            h.button_next_session_Callback([],[])
+          end
+        case 'delete'
+          if ~any(isnan(h.c_disp.active.picked.ROI))
+            s = h.c_disp.active.picked.ROI(1);
+            n = h.c_disp.active.picked.ROI(2);
+            ID = [c s n];
+            h.menu_remove_ROI([],[],ID)
+          elseif ~isempty(h.c_disp.active.picked.cluster)
+            h.remove_cluster(h.c_disp.active.picked.cluster)
+          end
+        case 'escape'
+          if ~strcmp(h.status.mark,'')
+            h.button_cancel_menu_Callback([],[],c)
+          elseif ~any(isnan(h.c_disp.active.picked.ROI))
+            s = h.c_disp.active.picked.ROI(1);
+            n = h.c_disp.active.picked.ROI(2);
+            idx = find(h.c_disp.active.session(s).ROI_ID == n);
+            face_handle = h.c_disp.active.session(s).ROI(idx);
+            h.toggle_picked_ROI(h.c_disp.active,hObject,c)
+          end
+        case 'return'
+          if ~strcmp(h.status.mark,'') && strcmp(get(h.uihandles.button_choose_ROIs_done,'enable'),'on')
+            h.button_choose_ROIs_done_Callback([],[])
+          end
+      end
+    end
+
+
+%%% ----------------------------------- end: GUI interaction functions ------------------------------------%%%
+
+%%% --------------------------------- start: data updating functions (DUF) --------------------------------%%%
+    
+    
+    function DUF(h,c_arr,calc,wbar)
+      if nargin > 1
+        if nargin > 2
+          h.status.clusters(c_arr).calc_occupancy = calc;
+          h.status.clusters(c_arr).calc_status = calc;
+          h.status.clusters(c_arr).calc_shape = calc;
+          h.status.clusters(c_arr).calc_stats = calc;
+        end
+        
+        ld_footprints = ~all([h.status.clusters(c_arr).calc_shape]);
+        ld_xdata = ~all([h.status.clusters(c_arr).calc_stats]);
+        ld_clusters = ld_footprints || ld_xdata;
+        
+        if ld_footprints
+          footprints = getappdata(0,'footprints');
+        end
+        if ld_xdata
+          xdata = getappdata(0,'xdata');
+        end
+        
+        for c = c_arr
+          if h.status.deleted(c)
             continue
           end
-          
-          if ~registered.session(s).neuron(n)   %% add new ROI_cluster if not already belonging to one
-            nCluster = nCluster + 1;
-            clusters(nCluster).session = struct('list',cell(h.data.nSes,1));
-            
-            clusters(nCluster).ID = nCluster;
-            session(s).ROI(n).cluster_ID = nCluster;
-            
-            clusters(nCluster).session(s).list = n;
-            registered.session(s).neuron(n) = true;
+          if nargin == 4 && wbar && ~mod(find(c==c_arr),100)
+            msg = sprintf('Prepared data of %d/%d clusters',c,h.data.nCluster);
+            waitbar(c/(2*h.data.nCluster),h.hwait,msg)
           end
           
+          h.DUF_cluster_occupancy(c);
+          h.DUF_cluster_status(c);
           
-          ID_n = session(s).ROI(n).cluster_ID;
+          if ld_footprints && ~h.status.clusters(c).calc_shape
+            tmp = h.DUF_cluster_shape(footprints,c);
+          end
+          if ld_xdata && ~h.status.clusters(c).calc_stats
+            tmp = h.DUF_cluster_stats(xdata,c);
+          end
+        end
+      end
+      
+      h.DUF_process_info()
+    end
+    
+    
+    function DUF_init(h,c_arr,calc,wbar)
+      
+      if nargin > 1
+        
+        clusters = getappdata(0,'clusters');
+        footprints = getappdata(0,'footprints');
+        xdata = getappdata(0,'xdata');
+        
+        for c = c_arr
           
-          match_candidates = find(xdata(s,sm).prob(n,:)>0.5);    %% all ROIs in sm that are candidates to be same as ROI (s,n)
-          for m = match_candidates
-            
-            if ~registered.session(sm).neuron(m)
-              
-              session(sm).ROI(m).cluster_ID = ID_n;
-              for c = ID_n
-                idx = length(clusters(c).session(sm).list)+1;
-                clusters(c).session(sm).list(idx) = m;
-              end
-              registered.session(sm).neuron(m) = true;
-                
-            elseif registered.session(sm).neuron(m)
-              fill_IDs = setdiff(ID_n,session(sm).ROI(m).cluster_ID);
-              for c = fill_IDs
-                idx = length(session(sm).ROI(m).cluster_ID) + 1;
-                session(sm).ROI(m).cluster_ID(idx) = c;
-                
-                idx = length(clusters(c).session(sm).list)+1;
-                clusters(c).session(sm).list(idx) = m;
-              end
-              
-              fill_IDs = setdiff(session(sm).ROI(m).cluster_ID,ID_n);
-              for c = fill_IDs
-                idx = length(session(s).ROI(n).cluster_ID) + 1;
-                session(s).ROI(n).cluster_ID(idx) = c;
-                
-                idx = length(clusters(c).session(s).list)+1;
-                clusters(c).session(s).list(idx) = n;
-              end
+          h.status.clusters(c).calc_occupancy = false;
+          h.status.clusters(c).calc_status = false;
+          h.status.clusters(c).calc_shape = false;
+          h.status.clusters(c).calc_stats = false;
+          
+          if nargin == 4 && wbar && ~mod(find(c==c_arr),100)
+            msg = sprintf('Prepared data of %d/%d clusters',c,h.data.nCluster);
+            waitbar(c/(2*h.data.nCluster),h.hwait,msg)
+          end
+          
+          h.DUF_cluster_occupancy(c);
+          h.DUF_cluster_status(c);
+          
+          clusters(c) = h.DUF_cluster_shape(footprints,c,clusters(c));
+          clusters(c) = h.DUF_cluster_stats(xdata,c,clusters(c));
+        end
+        setappdata(0,'clusters',clusters)
+        
+      end
+      
+      h.DUF_process_info()
+    end
+
+      
+    function DUF_cluster_occupancy(h,c)   %% 1st
+      
+      if ~h.status.clusters(c).calc_occupancy
+        h.data.clusters(c).occupancy = zeros(h.data.nSes,1);
+        for s = 1:h.data.nSes
+          h.data.clusters(c).occupancy(s) = length(h.data.clusters(c).session(s).list);
+        end
+        h.data.cluster_ct(c) = nnz(h.data.clusters(c).occupancy);
+        h.plots.clusters(c).thickness = h.data.cluster_ct(c)/h.data.nSes * 3;
+        
+        if h.data.cluster_ct(c) <= 1
+          h.empty_cluster(c);
+        end
+        h.status.clusters(c).calc_occupancy = true;
+      end
+    end
+      
+      
+    function DUF_cluster_status(h,c)    %% 2nd
+      
+      if ~h.status.clusters(c).calc_status
+        
+        h.status.cluster_multiROI(c) = any(h.data.clusters(c).occupancy>1); %% multiple ROIs assigned in any session?
+        
+        h.status.cluster_polyROI(c) = false;
+        h.status.cluster_manipulated(c) = false;
+        h.data.clusters(c).polyROI = zeros(h.data.nSes,1);
+        
+        for s = 1:h.data.nSes
+          for n = h.data.clusters(c).session(s).list
+            polyROI = length(h.data.session(s).ROI(n).cluster_ID);
+            h.data.clusters(c).polyROI(s) = max(h.data.clusters(c).polyROI(s),polyROI);
+            h.status.cluster_polyROI(c) = h.status.cluster_polyROI(c) || polyROI>1;
+            h.status.cluster_manipulated(c) = h.status.cluster_manipulated(c) || h.status.session(s).manipulated(n);
+          end
+        end
+        
+        h.status.merge_cluster(c) = logical(h.status.clusters(c).merge_ct);
+        h.status.split_cluster(c) = logical(h.status.clusters(c).split_ct);
+        
+        h.status.clusters(c).calc_status = true;
+      end
+    end
+      
+      
+    function clusters = DUF_cluster_shape(h,footprints,c,clusters)   %% 3rd
+      
+%        if ~h.status.clusters(c).calc_shape
+        if nargin < 4
+          clusters_tot = getappdata(0,'clusters');
+          clusters = clusters_tot(c);
+        end
+        clusters.A = sparse(h.data.imSize(1),h.data.imSize(2));
+        
+        for s = 1:h.data.nSes
+          for n = h.data.clusters(c).session(s).list
+            clusters.A = clusters.A + footprints.session(s).ROI(n).A;
+          end
+        end
+        if sum(clusters.A(:))
+          clusters.A = sparse(clusters.A/sum(clusters.A(:)));
+        end
+        clusters.centroid = [sum((1:h.data.imSize(1))*clusters.A),sum(clusters.A*(1:h.data.imSize(2))')];
+        
+        h.status.clusters(c).calc_shape = true;
+        if nargin < 4
+          clusters_tot(c) = clusters;
+          setappdata(0,'clusters',clusters_tot)
+        end
+%        end
+    end
+
+      
+    function clusters = DUF_cluster_stats(h,xdata,c,clusters)    % 4th
+      
+%        if ~h.status.clusters(c).calc_stats
+        if nargin < 4
+          clusters_tot = getappdata(0,'clusters');
+          clusters = clusters_tot(c);
+        end
+        if h.data.cluster_ct(c) > 1
+          %% preparing data
+          width = max(h.data.clusters(c).occupancy);
+          for s = 1:h.data.nSes
+            for i = 1:h.data.clusters(c).occupancy(s)
+              clusters.session(s).ROI(i).dist = zeros(h.data.nSes,width);
+              clusters.session(s).ROI(i).corr = zeros(h.data.nSes,width);
+              clusters.session(s).ROI(i).prob = zeros(h.data.nSes,width);
             end
+          end
+          
+          %% writing and calculating stats
+          prob = [];
+          for s = 1:h.data.nSes
+            for i = 1:h.data.clusters(c).occupancy(s)
+              n = h.data.clusters(c).session(s).list(i);
+              
+              for sm = 1:h.data.nSes
+                for j = 1:h.data.clusters(c).occupancy(sm)
+                  m = h.data.clusters(c).session(sm).list(j);
+                  
+                  if all([s n] == [sm m])
+                    continue
+                  end
+                  try
+                    clusters.session(s).ROI(i).dist(sm,j) = xdata(s,sm).dist(n,m);
+                    clusters.session(s).ROI(i).corr(sm,j) = xdata(s,sm).corr(n,m);
+                    clusters.session(s).ROI(i).prob(sm,j) = xdata(s,sm).prob(n,m);
+                  catch
+                    clusters.session(s).ROI(i).dist(sm,j) = NaN;
+                    clusters.session(s).ROI(i).corr(sm,j) = NaN;
+                    clusters.session(s).ROI(i).prob(sm,j) = NaN;
+                  end
+                end
+              end
+              clusters.session(s).ROI(i).mean_dist = sum(clusters.session(s).ROI(i).dist(:))/(sum(h.data.clusters(c).occupancy) - 1);
+              clusters.session(s).ROI(i).mean_corr = sum(clusters.session(s).ROI(i).corr(:))/(sum(h.data.clusters(c).occupancy) - 1);
+              clusters.session(s).ROI(i).mean_prob = sum(clusters.session(s).ROI(i).prob(:))/(sum(h.data.clusters(c).occupancy) - 1);
+              prob = [prob clusters.session(s).ROI(i).mean_prob];
+            end
+          end
+          
+          cluster_score = mean(prob)^(1+var(prob));
+          h.data.cluster_score(c) = cluster_score;
+          clusters.score = cluster_score;
+          
+          h.plots.clusters(c).color = [1-clusters.score,clusters.score,0];
+          
+        else
+          h.data.cluster_score(c) = NaN;
+          clusters.score = NaN;
+          
+          h.plots.clusters(c).color = [NaN, NaN, NaN];
+        end
+        h.status.clusters(c).calc_stats = true;
+        if nargin < 4
+          clusters_tot(c) = clusters;
+          setappdata(0,'clusters',clusters_tot)
+        end
+%        end
+    end
+      
+      
+    function DUF_process_info(h)
+      
+      str_active = sprintf('Clusters displayed / processed / total /removed: %d / %d / %d / %d',nnz(h.status.active & h.plots.cluster_plotted),nnz(h.status.processed),nnz(~h.status.deleted),nnz(h.status.deleted));
+      set(h.uihandles.text_now_active,'String',str_active)
+      
+      str_unsure = sprintf('Clusters unsure: %d / %d',nnz(h.status.unsure),nnz(~h.status.deleted));
+      set(h.uihandles.text_now_processed,'String',str_unsure)
+      
+      del = 0;
+      for s = 1:h.data.nSes
+        del = del + nnz(h.status.session(s).deleted);
+      end
+      str_deleted = sprintf('ROIs deleted: %d / %d',del,sum([h.data.session.nROI]));
+      set(h.uihandles.text_now_deleted,'String',str_deleted)
+    end
+
+%%% ------------------------------- end: data updating functions -------------------------------%%%
+    
+    
+    function choose_cluster(h,obj,c)
+      
+      if isempty(c) || isnan(c) || c < 1 || c > h.data.nCluster
+        c = [];
+      end
+      
+      if ~isempty(obj.picked.cluster) && ~h.status.deleted(obj.picked.cluster)
+        set(h.plots.cluster_handles(obj.picked.cluster),'Color',h.plots.clusters(obj.picked.cluster).color)
+        PUF_cluster_textbox(h,obj,[])
+      end
+      obj.picked.cluster = c;
+      
+      %% reset some stuff
+      obj.picked.ROI = [NaN NaN];
+      set(h.uihandles.checkbox_ROI_unsure,'enable','off','Value',false)
+      
+      if ~strcmp(h.status.mark,'')
+        h.button_cancel_menu_Callback([],[],c)
+      end
+      
+      %% set overall plot and GUI controls
+      if ~isempty(c)
+        if ~h.plots.cluster_plotted(c)
+          h.plot_cluster_shape(c)
+        end
+        set(h.plots.cluster_handles(c),'Color','m')
+        
+        set(h.uihandles.checkbox_processed,'Value',h.status.processed(c),'enable','on')
+        set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c),'enable','on')
+        set(h.uihandles.checkbox_merge,'Value',h.status.merge_cluster(c))
+        set(h.uihandles.checkbox_split,'Value',h.status.split_cluster(c))
+        set(h.uihandles.checkbox_manipulated,'Value',h.status.cluster_manipulated(c))
+        set(obj.slider_cluster_ID,'Value',c)
+      else
+        set(h.uihandles.checkbox_processed,'Value',0,'enable','off')
+        set(h.uihandles.checkbox_unsure,'Value',0,'enable','off')
+        set(h.uihandles.checkbox_merge,'Value',0)
+        set(h.uihandles.checkbox_split,'Value',0)
+        set(h.uihandles.checkbox_manipulated,'Value',0)
+        set(obj.slider_cluster_ID,'Value',0)
+      end
+      
+      h.plot_cluster(obj,c);
+      set(obj.entry_cluster_ID,'String',sprintf('%d',c))
+      
+%        set(h.uihandles.button_run_manipulation,'Callback',@h.button_run_manipulation_Callback)
+      
+      
+    end
+    
+    
+%%% -------------------------------- start: ROI menu functions ---------------------------------%%%
+
+    function create_ROI_menu(h,obj,face_handle,ID,side)
+      
+      c = uicontextmenu(h.uihandles.figure1);
+      
+      % Assign the uicontextmenu to the plot
+      set(face_handle,'UIContextMenu',c)
+      
+      % Create child menu items for the uicontextmenu
+      m1 = uimenu(c,'Label','Toggle belong','Callback',{@h.toggle_belong,obj,ID,face_handle});
+      m2 = uimenu(c,'Label','Display other IDs','Callback',{@h.menu_plot_other_ID,ID});
+      m3 = uimenu(c,'Label','Remove other IDs','Callback',{@h.menu_clear_ROI_ID,obj,ID});
+      m4 = uimenu(c,'Label','Mark as unsure','Callback',[]);
+      m5 = uimenu(c,'Label','Mark for merging','Callback',{@h.menu_merging,obj,ID,face_handle});
+      m6 = uimenu(c,'Label','Mark for splitting','Callback',{@h.menu_splitting,obj,ID,face_handle});
+      m7 = uimenu(c,'Label','Remove ROI','Callback',{@h.menu_remove_ROI,ID});
+      m8 = uimenu(c,'Label','Show Calcium trace','Callback',{@h.menu_show_CaTrace,ID});
+    end
+
+
+    function toggle_belong(h, hObject, eventdata, obj, ID, face_handle)
+      
+      if nargin == 6
+        hObject = face_handle;
+      end
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      h.toggle_picked_ROI(obj,hObject,c)
+      
+      h.toggle_cluster_list(ID)
+      
+      %% statistics update
+      h.DUF(c,false)
+      
+      %% plot updates 
+      h.PUF_ROI_face(obj,ID)
+      h.PUF_cluster(obj,c)
+      h.PUF_match_stats()
+      
+      h.toggle_picked_ROI(obj,hObject,ID)
+      
+      if ~h.status.deleted(c)
+        delete(h.plots.cluster_handles(c))
+        h.plot_cluster_shape(c)
+        set(h.plots.cluster_handles(c),'Color','m')
+      end
+      
+      %% check other clusters for updates
+      for c_other = setdiff(h.data.session(s).ROI(n).cluster_ID,c)
+        
+        h.status.clusters(c_other).calc_occupancy = false;
+        h.status.clusters(c_other).calc_status = false;
+        h.DUF(c_other);
+        
+        obj = h.get_axes(c_other);
+        if ~isempty(obj)
+          h.PUF_assignment_stats(obj,c_other)
+          h.PUF_ROI_face(obj,[c_other,s,n])
+        end
+      end
+      h.toggle_processed([],[],c,false)
+      set(h.uihandles.checkbox_processed,'Value',h.status.processed(c))
+      set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c))
+      set(h.uihandles.checkbox_merge,'Value',h.status.merge_cluster(c))
+      set(h.uihandles.checkbox_split,'Value',h.status.split_cluster(c))
+      set(h.uihandles.checkbox_manipulated,'Value',h.status.cluster_manipulated(c))
+    end
+      
+      
+    function menu_plot_other_ID(h, hObject, eventdata, ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      %% find axis to plot to
+      if h.c_disp.c(1).picked.cluster == c
+        obj = h.c_disp.c(2);
+      else
+        obj = h.c_disp.c(1);
+      end
+      
+      c_new = setdiff(h.data.session(s).ROI(n).cluster_ID,c);
+      if length(c_new) > 1
+        uiwait(msgbox('more than 1 candidate to be plotted - allow choosing from UI'))
+      else
+        h.choose_cluster(obj,c_new);
+      end
+    end
+      
+
+    function menu_clear_ROI_ID(h, hObject, eventdata, obj, ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      xdata = getappdata(0,'xdata');
+      h.clear_ID(xdata,c,s,n);
+      
+      h.DUF_cluster_status(c);
+      h.PUF_assignment_stats(obj,c)
+      
+    end
+    
+    
+    function menu_merging(h, hObject, eventdata, obj, ID, face_handle)
+      
+      %% 2 ROI (red, same session) -> 1 ROI (compound)
+      %% 2 ROI (red, same session) -> 1 ROI (ROI from any session)
+      
+      h.status.mark = 'merge_pre';
+      
+      c = ID(1);
+      
+      if length(ID)>1
+        s = ID(2);
+        n = ID(3);
+      else
+        s = obj.picked.ROI(1);
+        n = obj.picked.ROI(2);
+      end
+      
+      h.toggle_picked_ROI(obj,hObject,c);
+      
+      h.status.minmax_ROI = [2,2];  % min/max number of ROIs to choose
+      
+      h.status.picked.markROIs(1).c = h.data.session(s).ROI(n).cluster_ID;
+      h.status.picked.markROIs(1).ID = [s n];
+      
+      h.enable_markROI(c,'r','Merging','to merge',s);
+      
+      set(obj.ROI_textbox,'Visible','off')
+      
+      h.ButtonDown_markROIs(face_handle,[],[c s n],'r')
+      set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback,'Visible','on','enable','off')
+      
+    end
+      
+      
+    function menu_splitting(h, hObject, eventdata, obj, ID, face_handle)
+    
+      %% 1 ROI (red) -> 2 ROI (green, anywhere)
+      %% 1 ROI (red) -> 1 ROI (anywhere, means pretty much: cutting off)
+%        h.status.manipulate = struct('processed',{},'pre',{},'post',{},'type',{},'c',{});
+%        h.status.manipulate_ct = 0;
+      
+      h.status.mark = 'split';
+      
+      c = ID(1);
+      if length(ID) > 1
+        s = ID(2);
+        n = ID(3);
+      elseif ~any(isnan(obj.picked.ROI))
+        s = obj.picked.ROI(1);
+        n = obj.picked.ROI(2);
+      end
+      
+      h.toggle_picked_ROI(obj,hObject,c);
+      
+      h.status.minmax_ROI = [1,2];  % min/max number of ROIs to choose
+      
+      idx = h.status.manipulate_ct+1;
+%        h.status.manipulate(idx).c = h.data.session(s).ROI(n).cluster_ID;
+      h.status.manipulate(idx).pre = struct('ID',[s n],'c',h.data.session(s).ROI(n).cluster_ID);
+      
+      set(face_handle,'EdgeColor','r')
+      
+      session_filter = 1:h.data.nSes;
+      session_filter(s) = [];
+          
+      h.enable_markROI(c,'g','Splitting','as new footprints',session_filter);
+      
+      set(obj.ROI_textbox,'Visible','off')
+      set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback,'Visible','on','enable','off')
+    end
+    
+    
+    
+    function enable_markROI(h,c,col,str_title,str_explain,session_filter)
+      
+      if nargin < 5
+        session_filter = 1:h.data.nSes;
+      end
+      
+      obj = h.get_axes(c);
+      
+      if h.status.minmax_ROI(1) == h.status.minmax_ROI(2)
+        h.status.markROIs_str = sprintf('%s\nChoose %d ROIs %s: ',str_title,h.status.minmax_ROI(2),str_explain);
+      else
+        h.status.markROIs_str = sprintf('%s\nChoose %d to %d ROIs %s: ',str_title,h.status.minmax_ROI(1),h.status.minmax_ROI(2),str_explain);
+      end
+      set(obj.add_ROI_textbox,'String',h.status.markROIs_str,'Visible','on')
+      set(h.uihandles.button_cancel_menu,'Visible','on','enable','on')
+      
+      %% enable different ButtonDownFct in all ROIs to pick 2 ROIs
+      for s = 1:h.data.nSes
+        for i = 1:length(obj.session(s).ROI_ID)
+          n = obj.session(s).ROI_ID(i);
+          if ismember(s,session_filter)
+            set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_markROIs,[c s n],col})
+%            elseif (strcmp(h.status.mark,'split') && ismember([s n],h.status.manipulate(h.status.manipulate_ct+1).pre,'rows')) || (strcmp(h.status.mark,'merge_post') && ismember([s n],h.status.manipulate(h.status.manipulate_ct+1).pre,'rows'))
+%              set(obj.session(s).ROI(i),'ButtonDownFcn',[])
+          else
+            set(obj.session(s).ROI(i),'ButtonDownFcn',[])
+          end
+        end
+      end
+      h.status.picked.markROIs = [];
+      
+      set(h.uihandles.button_cancel_menu,'Callback',{@h.disable_markROI,c})
+    end
+    
+    
+    function disable_markROI(h,hObject,event,c)
+      
+      obj = h.get_axes(c);
+      set(obj.add_ROI_textbox,'String','','Visible','off')
+      
+      %% enable different ButtonDownFct in all ROIs to pick 2 ROIs
+      for s = 1:h.data.nSes
+        for i = 1:length(obj.session(s).ROI_ID)
+          n = obj.session(s).ROI_ID(i);
+          set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'EdgeColor','k')
+        end
+      end
+      h.status.picked.markROIs = [];
+      
+      set(h.uihandles.button_choose_ROIs_done,'Visible','off','enable','off')
+      set(h.uihandles.button_cancel_menu,'Visible','off','enable','off')
+      
+    end
+      
+      
+    function menu_remove_ROI(h, hObject, eventdata, ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      h.remove_ROI(s,n)
+      
+      obj = h.get_axes(c);
+      
+      idx = find(obj.session(s).ROI_ID==n);
+      delete(obj.session(s).ROI(idx))
+      
+      obj.session(s).ROI_ID(idx) = [];
+      obj.session(s).ROI(idx) = [];
+      
+      h.PUF_cluster(obj,c)
+      h.PUF_match_stats()
+      
+    end
+      
+      
+    function remove_ROI(h,s,n)
+      
+      h.status.mark = 'discard';
+      h.status.session(s).deleted(n) = true;
+      clusters = getappdata(0,'clusters');
+      %% disengage from all clusters
+      for c = h.data.session(s).ROI(n).cluster_ID
+        clusters(c).session(s).list = setdiff(clusters(c).session(s).list,c);
+        h.data.clusters(c).session(s).list = setdiff(h.data.clusters(c).session(s).list,n);
+        h.DUF(c,false)
+      end
+      setappdata(0,'clusters',clusters)
+      
+      h.status.manipulate_ct = h.status.manipulate_ct + 1;
+      h.status.manipulate(h.status.manipulate_ct).processed = true;
+      h.status.manipulate(h.status.manipulate_ct).type = 'discard';
+      h.status.manipulate(h.status.manipulate_ct).pre(1).c = h.data.session(s).ROI(n).cluster_ID;
+      h.status.manipulate(h.status.manipulate_ct).pre(1).ID = [s n];
+      h.status.manipulate(h.status.manipulate_ct).post = [];
+      
+      %% disable visibility (removing centroid)
+      h.data.session(s).ROI(n).removed = true;
+      
+      h.update_table()
+      h.status.mark = '';
+      
+      %% update stats and plots
+
+    end
+    
+    
+    function menu_show_CaTrace(h,hObject,eventdata,ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
+      
+      CaPath = pathcat(pathSession,'CaData.mat');
+      Ca_mat = matfile(CaPath,'Writable',true);
+      
+      figure('position',[500 500 900 600])
+      ax_C = subplot(2,1,1);
+      plot(ax_C,linspace(1/15,8989/15,8989),Ca_mat.C2(n,:),'k')
+      ylabel(ax_C,'Calcium signal')
+      
+      ax_S = subplot(2,1,2);
+      plot(ax_S,linspace(1/15,8989/15,8989),Ca_mat.S2(n,:),'k')
+      
+      xlabel(ax_S,'time')
+      ylabel(ax_S,'deconvolved signal')
+      
+      suptitle(sprintf('ROI #%d (%d)',n,s))
+      
+    end
+  
+%%% ------------------------------------ end: ROI menu functions ----------------------------%%%
+      
+    function toggle_picked_ROI(h, obj, hObject, ID)
+      
+      c = ID(1);
+      
+      %% reset earlier picked ROI
+      if ~all(isnan(obj.picked.ROI))
+        idx = find(obj.session(obj.picked.ROI(1)).ROI_ID==obj.picked.ROI(2));
+        set(obj.session(obj.picked.ROI(1)).ROI(idx),'EdgeColor','k')
+      end
+        
+      if length(ID)>1
+        c = ID(1);
+        s = ID(2);
+        n = ID(3);
+        
+        if all(obj.picked.ROI == [s n])
+          obj.picked.ROI = [NaN NaN];
+          h.display_ROI_info(obj,[])
+          set(h.uihandles.checkbox_ROI_unsure,'enable','off','Value',false)
+        else
+          obj.picked.ROI = [s n];
+          h.display_ROI_info(obj,ID)
+          set(hObject,'EdgeColor','r')
+          if ismember(n,h.data.clusters(c).session(s).list)
+            idx = find(h.data.clusters(c).session(s).list==n);
+            set(h.uihandles.checkbox_ROI_unsure,'enable','on','Value',h.data.clusters(c).session(s).ROI(idx).unsure)
+          else
+            set(h.uihandles.checkbox_ROI_unsure,'enable','off','Value',false)
+          end
+        end
+      else
+        obj.picked.ROI = [NaN NaN];
+        h.display_ROI_info(obj,[])
+        set(h.uihandles.checkbox_ROI_unsure,'enable','off','Value',false)
+      end
+    end
+
+
+      
+    function toggle_cluster_list(h, ID)
+      
+      c = ID(1);
+      s = ID(2);
+      n = ID(3);
+      
+      clusters = getappdata(0,'clusters');
+      
+      %% data update
+      idx = find(clusters(c).session(s).list==n);
+      
+      if ~isempty(idx)  %% removing ROI from cluster
+        clusters(c).session(s).list(idx) = [];
+        h.data.clusters(c).session(s).list(idx) = [];
+        h.data.clusters(c).session(s).ROI(idx) = [];
+        
+        idx = find(h.data.session(s).ROI(n).cluster_ID==c);
+        h.data.session(s).ROI(n).cluster_ID(idx) = [];
+      else
+        idx = h.data.clusters(c).occupancy(s)+1;
+        clusters(c).session(s).list(idx) = n;
+        h.data.clusters(c).session(s).list(idx) = n;
+        
+        clusters(c).session(s).ROI(idx).unsure = false;
+        h.data.clusters(c).session(s).ROI(idx).unsure = false;
+        
+        idx = length(h.data.session(s).ROI(n).cluster_ID) + 1;
+        h.data.session(s).ROI(n).cluster_ID(idx) = c;
+      end
+      setappdata(0,'clusters',clusters)
+      h.DUF(c,false)
+    end
+    
+    
+    
+    function PUF_match_stats(h)
+      c_arr = ~h.status.deleted;
+      set(h.plots.histo_ct,'Data',h.data.cluster_ct(c_arr))
+      set(h.plots.histo_score,'Data',h.data.cluster_score(c_arr))
+    end
+    
+    
+    
+    
+    function button_run_manipulation_Callback(h, hObject, eventdata)
+      
+%        set(hObject,'enable','off')
+      disp('now executing all desired manipulations')
+      
+      %% going though sessions and process all manipulations of a single session at once (save loading time...)
+      
+%        A_mat = matfile(h.path.footprints,'Writable',true);
+      s_ld = 0;
+      for s = 1:h.data.nSes
+        for i = 1:h.status.manipulate_ct
+          
+          if ~h.status.manipulate(i).processed && (s==h.status.manipulate(i).pre(1).ID(1));
+            
+            disp(sprintf('-------------------- manipulation #%d ----------------------',i))
+            
+            footprints = getappdata(0,'footprints');
+            imSize = footprints.data.imSize;
+            
+            pre = struct;
+            post = struct;
+            
+            pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
+            h5file = dir(pathcat(pathSession,'*.h5'));
+            pathData = pathcat(pathSession,h5file.name)
+            
+            if s ~= s_ld
+              Y = h5read(pathData,'/DATA');
+              disp('file read')
+            end
+            
+            CaPath = pathcat(pathSession,'CaData.mat');
+            Ca_mat = matfile(CaPath,'Writable',true);
+            
+            %% get all previously assigned cluster IDs to assign to new ones
+            
+            
+            for j = 1:length(h.status.manipulate(i).pre)
+              n = h.status.manipulate(i).pre(j).ID(2);
+              pre(j).C2 = Ca_mat.C2(n,:);
+            end
+            for j = 1:length(h.status.manipulate(i).post)
+              sm = h.status.manipulate(i).post(j).ID(1);
+              m = h.status.manipulate(i).post(j).ID(2);
+            end
+            
+            switch h.status.manipulate(i).type
+              case 'merge'
+                if isempty(h.status.manipulate(i).post)
+                  post.A = sparse(imSize(1),imSize(2));
+                  for j = 1:length(h.status.manipulate(i).pre)
+                    sm = h.status.manipulate(i).pre(j).ID(1);
+                    m = h.status.manipulate(i).pre(j).ID(2);
+                    
+                    post.A = post.A + footprints.session(sm).ROI(m).A;
+                  end
+                  
+                else
+                  sm = h.status.manipulate(i).post(1).ID(1);
+                  m = h.status.manipulate(i).post(1).ID(2);
+                  
+                  post.A = footprints.session(sm).ROI(m).A;
+                end
+                [y_idx,x_idx] = find(post.A);
+                extents = [min(y_idx), max(y_idx); min(x_idx), max(x_idx)];
+                Y_tmp = double(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:));
+                A_tmp = post.A(extents(1,1):extents(1,2),extents(2,1):extents(2,2));
+                C = zeros(1,size(Y_tmp,3));
+                tic
+                for t=1:size(Y,3)
+                  C(t) = sum(sum(A_tmp.*Y_tmp(:,:,t)));
+                end
+                toc
+                %% process trace to obtain deconvolved trace
+                [post.C2,post.S2] = deconvolveCa(C);
+                post.C2 = post.C2';
+                post.S2 = post.S2';
+                
+                %% test for fitness 
+%                  options = struct('N_samples_exc',6,'robust_std',0);
+%                  fitness = compute_event_exceptionality(C,options.N_samples_exc,options.robust_std);
+                
+%                  [post.C2 post.S2] = get_process_CaTrace(post.A,pathData);
+                
+              case 'split'
+                for j = 1:length(h.status.manipulate(i).post)
+                  sm = h.status.manipulate(i).post(j).ID(1);
+                  m = h.status.manipulate(i).post(j).ID(2);
+                  
+                  post(j).A = footprints.session(sm).ROI(m).A;
+                  
+                  [y_idx,x_idx] = find(post(j).A);
+                  extents = [min(y_idx), max(y_idx); min(x_idx), max(x_idx)];
+                  
+                  Y_tmp = double(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:));
+                  A_tmp = post(j).A(extents(1,1):extents(1,2),extents(2,1):extents(2,2));
+                
+                  C = zeros(1,size(Y,3));
+                  tic
+                  for t=1:size(Y,3)
+                    C(t) = sum(sum(A_tmp.*Y_tmp(:,:,t)));
+                  end
+                  toc
+                  
+                  %% process trace to obtain deconvolved trace
+                  [post(j).C2,post(j).S2] = deconvolveCa(C);
+                  post(j).C2 = post(j).C2';
+                  post(j).S2 = post(j).S2';
+                end
+                
+            end
+            
+            f = figure('position',[500 500 1200 900])
+            hold on
+%              disp('pre')
+            subplot(2,1,1)
+            offset = 2*10^(5);
+            for j = 1:length(pre)
+              plot(offset*(j-1)+pre(j).C2,'--')
+%                for k = 1:length(post)
+%                  corrcoef(pre(j).C2,post(k).C2)
+%                end
+            end
+            hold off
+%              disp('post')
+            subplot(2,1,2)
+            hold on
+            for j = 1:length(post)
+              plot(offset*(j-1)+post(j).C2,'--')
+%                for k = 1:length(post)
+%                  corrcoef(post(j).C2,post(k).C2)
+%                end
+            end
+            hold off
+            
+            Ca_button_accept = uicontrol(f,'Style','pushbutton',...
+                          'String','Accept',...
+                          'Units','normalized','Position',[0.6 0.05 0.2 0.05],'Callback',@h.accept_manipulation);
+            
+            Ca_button_refuse = uicontrol(f,'Style','pushbutton',...
+                          'String','Refuse',...
+                          'Units','normalized','Position',[0.2 0.05 0.2 0.05],'Callback',@h.refuse_manipulation);
+
+            %%% perform all of this as callback function, after popup-figure is closed
+            status = true;
+            if status
+            
+              %% save footprint and Calcium trace to end of footprints & Ca files
+              
+              
+              if size(Ca_mat.C2,1) ~= footprints.data.session(s).nROI
+                disp(sprintf('whats going on here? different sizes: %d vs %d',size(Ca_mat.C2,1),footprints.data.session(s).nROI))
+              end
+              
+              %% let decide, whether to accept or reject manipulation
+              for j = 1:length(h.status.manipulate(i).pre)
+                %% unassign pre-ROIs
+                n = h.status.manipulate(i).pre(j).ID(2);
+                for c = h.status.manipulate(i).c
+                  if ismember(c,h.data.session(s).ROI(n).cluster_ID)
+                    h.toggle_cluster_list([c,s,n])
+                  end
+                end
+              end
+              
+              for j = 1:length(h.status.manipulate(i).post)
+                
+                footprints = getappdata(0,'footprints');
+                
+                n = footprints.data.session(s).nROI + 1;    %% append to end of data
+                
+                sm = h.status.manipulate(i).post(j).ID(1);
+                m = h.status.manipulate(i).post(j).ID(2);
+                
+                %% update footprints file
+                footprints.data.session(s).nROI = n;
+                footprints.session(s).ROI(n).A = post(j).A;
+                
+                A_tmp_norm = post(j).A/sum(post(j).A(:));
+                footprints.session(s).ROI(n).centroid = [sum((1:imSize(1))*A_tmp_norm),sum(A_tmp_norm*(1:imSize(2))')];
+                footprints.session(s).ROI(n).norm = norm(full(post(j).A));
+                
+                footprints.session(s).centroids(n,:) = footprints.session(s).ROI(n).centroid;
+                setappdata(0,'footprints',footprints)
+                
+                xdata = getappdata(0,'xdata');
+                for sk = 1:h.data.nSes
+                  xdata(s,sk).dist(n,1:size(xdata(sm,sk).dist,2)) = xdata(sm,sk).dist(m,:);
+                  xdata(sk,s).dist(1:size(xdata(sk,sm).dist,1),n) = xdata(sk,sm).dist(:,m);
+                  
+                  xdata(s,sk).prob(n,1:size(xdata(sm,sk).prob,2)) = xdata(sm,sk).prob(m,:);
+                  xdata(sk,s).prob(1:size(xdata(sk,sm).prob,1),n) = xdata(sk,sm).prob(:,m);
+                  
+                  xdata(s,sk).corr(n,1:size(xdata(sm,sk).corr,2)) = xdata(sm,sk).corr(m,:);
+                  xdata(sk,s).corr(1:size(xdata(sk,sm).corr,1),n) = xdata(sk,sm).corr(:,m);
+                end
+                setappdata(0,'xdata',xdata)
+                
+                %% update CaTraces file
+                Ca_mat.C2(n,:) = post(j).C2;
+                Ca_mat.S2(n,:) = post(j).S2;
+                
+                h.data.session(s).ROI(n) = struct('cluster_ID',[],'removed',false);
+                
+                %% update clusters structure
+                for c = h.status.manipulate(i).c
+                  h.toggle_cluster_list([c,s,n])
+                end
+                
+                %% update h-structure
+                h.data.session(s).ROI(n).cluster_ID = h.status.manipulate(i).c;
+                h.data.cluster_centroids(n,:) = footprints.session(s).ROI(n).centroid;
+                h.status.session(s).manipulated(n) = true;
+              end
+              
+              h.data.session(s).nROI = n;
+              
+              %% update cluster appearance etc
+              for c = h.status.manipulate(i).c
+                h.DUF(c,false)
+                switch h.status.manipulate(i).type
+                  case 'merge'
+                    h.status.clusters(c).merge_ct = h.status.clusters(c).merge_ct - 1;
+                    h.status.merge_cluster(c) = logical(h.status.clusters(c).merge_ct);
+                  case 'split'
+                    h.status.clusters(c).split_ct = h.status.clusters(c).split_ct - 1;
+                    h.status.split_cluster(c) = logical(h.status.clusters(c).split_ct);
+                end
+              end
+              
+              %% update nROI and structures etc accordingly
+              
+              
+              %% "delete" old (pre)-neurons
+              for j = 1:length(h.status.manipulate(i).pre)
+                s = h.status.manipulate(i).pre(j).ID(1);
+                n = h.status.manipulate(i).pre(j).ID(2);
+                h.remove_ROI(s,n);
+              end
+              h.status.manipulate(i).processed = true;
+              
+              %% assign new ID(s) (post) to cluster
+              
+              %% update plots: single ROIs display (replot cluster), and clustershape (replot shape)
+              disp('done')
+              [idx_bool, idx_list] = ismember(h.c_disp.active.picked.cluster,h.status.manipulate(i).c);
+              
+              if idx_bool
+                h.choose_cluster(h.c_disp.active,h.status.manipulate(i).c(idx_list))
+              end
+              
+              
+              h.update_table()
+            end
+          else
+%              disp(sprintf('%d (%s) already processed',i,h.status.manipulate(i).type))
+          end
+        end
+      end
+      set(hObject,'enable','on')
+    end
+    
+    
+    
+    function status = accept_manipulation(h,hObject,eventdata)
+      status = true;
+      msgbox('manipulation accepted')
+      close(gcf)
+    end
+    
+    function status = refuse_manipulation(h,hObject,eventdata)
+      status = false;
+      msgbox('manipulation refused')
+      close(gcf)
+    end
+    
+    function cluster2handle(h)
+      
+      clusters = getappdata(0,'clusters');
+      for s = 1:h.data.nSes
+        h.data.session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1),'removed',false);
+      end
+      
+      h.data.nCluster = length(clusters);
+      for c = 1:h.data.nCluster
+        h.data.clusters(c).session = struct('list',cell(h.data.nSes,1));
+        
+        for s = 1:h.data.nSes
+          h.data.clusters(c).session(s).list = clusters(c).session(s).list;
+          
+          for idx = 1:length(h.data.clusters(c).session(s).list)
+            h.data.clusters(c).session(s).ROI(idx).unsure = clusters(c).session(s).ROI(idx).unsure;
+            
+            n = h.data.clusters(c).session(s).list(idx);
+            h.data.session(s).ROI(n).cluster_ID = [h.data.session(s).ROI(n).cluster_ID c];
           end
         end
       end
     end
-    toc
-    setappdata(0,'pre_clusters',clusters)
-    setappdata(0,'session',session)
   end
+end
+
+ 
+
+
+    
+function [C,S] = get_process_CaTrace(A,pathData)
+
+  %% load cropped area (is very slow...)
+%    [y_idx,x_idx] = find(A);
+%    extents = [min(y_idx), max(y_idx); min(x_idx), max(x_idx)];
+%    Y = double(read_file_crop(pathData,extents));
+%    disp('reading done')
+%    
+%    %% multiply by A
+%    A_tmp = full(A(extents(1,1):extents(1,2),extents(2,1):extents(2,2)));
+%    C = zeros(1,size(Y,3));
+%    for t=1:size(Y,3)
+%      C(t) = sum(sum(A_tmp.*Y(:,:,t)));
+%    end
+%    
+%    %% process trace to obtain deconvolved trace
+%    [C,S] = deconvolveCa(C);
+%    
+%    
+%    C = C';
+%    S = S';
   
-  tic
-  session = getappdata(0,'session');
-  real_matching(h,session,0.8);
-  toc
+  C = rand(1,8989);
+  S = rand(1,8989);
   
+  %% test for fitness 
+  options = struct('N_samples_exc',6,'robust_std',0);
+  fitness = compute_event_exceptionality(C,options.N_samples_exc,options.robust_std);
   
+end
   
+
+
+
+
+
+
   
+%%% --------------------------------- start: clustering functions -------------------------------%%%
+
+
+%  function pre_clustering(h)
+%    
+%    appdata = get(0,'ApplicationData');
+%    
+%    if ~isfield(appdata,'pre_clusters')
+%    
+%      xdata = getappdata(0,'xdata');
+%      
+%      registered = struct('session',struct);
+%      clusters = struct('ID',[]);
+%      
+%      session = struct;
+%      for s = 1:h.data.nSes
+%        registered.session(s).neuron = false(h.data.session(s).nROI,1);
+%        session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1),'matched',cell(h.data.session(s).nROI,1));
+%      end
+%      
+%      nCluster = 0;
+%      
+%      tic
+%      for s = 1:h.data.nSes
+%        for sm = 1:h.data.nSes
+%          
+%          for n = 1:h.data.session(s).nROI
+%            if sm == s
+%              session(s).ROI(n).matched = false;
+%              continue
+%            end
+%            
+%            if ~registered.session(s).neuron(n)   %% add new ROI_cluster if not already belonging to one
+%              nCluster = nCluster + 1;
+%              clusters(nCluster).session = struct('list',cell(h.data.nSes,1));
+%              
+%              clusters(nCluster).ID = nCluster;
+%              session(s).ROI(n).cluster_ID = nCluster;
+%              
+%              clusters(nCluster).session(s).list = n;
+%              registered.session(s).neuron(n) = true;
+%            end
+%            
+%            
+%            ID_n = session(s).ROI(n).cluster_ID;
+%            
+%            match_candidates = find(xdata(s,sm).prob(n,:)>0.5);    %% all ROIs in sm that are candidates to be same as ROI (s,n)
+%            for m = match_candidates
+%              
+%              if ~registered.session(sm).neuron(m)
+%                
+%                session(sm).ROI(m).cluster_ID = ID_n;
+%                for c = ID_n
+%                  idx = length(clusters(c).session(sm).list)+1;
+%                  clusters(c).session(sm).list(idx) = m;
+%                end
+%                registered.session(sm).neuron(m) = true;
+%                  
+%              elseif registered.session(sm).neuron(m)
+%                fill_IDs = setdiff(ID_n,session(sm).ROI(m).cluster_ID);
+%                for c = fill_IDs
+%                  idx = length(session(sm).ROI(m).cluster_ID) + 1;
+%                  session(sm).ROI(m).cluster_ID(idx) = c;
+%                  
+%                  idx = length(clusters(c).session(sm).list)+1;
+%                  clusters(c).session(sm).list(idx) = m;
+%                end
+%                
+%                fill_IDs = setdiff(session(sm).ROI(m).cluster_ID,ID_n);
+%                for c = fill_IDs
+%                  idx = length(session(s).ROI(n).cluster_ID) + 1;
+%                  session(s).ROI(n).cluster_ID(idx) = c;
+%                  
+%                  idx = length(clusters(c).session(s).list)+1;
+%                  clusters(c).session(s).list(idx) = n;
+%                end
+%              end
+%            end
+%          end
+%        end
+%      end
+%      toc
+%      setappdata(0,'pre_clusters',clusters)
+%      setappdata(0,'session',session)
+%    end
+%    
+%    tic
+%    session = getappdata(0,'session');
+%    real_matching2(h,session,0.8);
+%    toc
+%  end
+ 
   
-function real_matching(h,session,p_thr)
-  
-%    nSes = size(pre_clusters(1).list,1);
-  
-  pre_clusters = getappdata(0,'pre_clusters');
+%  function real_matching(h,session,p_thr)
+%    
+%  %    nSes = size(pre_clusters(1).list,1);
+%    
+%    pre_clusters = getappdata(0,'pre_clusters');
+%    
+%    xdata = getappdata(0,'xdata');
+%    mode = 'threshold';
+%  %      mode = 'other';
+%    
+%    %% now, go through all clusters and assign surely matching ROIs to each other (p_same>0.95)
+%    %%% here, implementing footprints in the matching process should help/improve the results quite a bit
+%    
+%    %% afterwards, check chance of others belonging to the same cluster or whether chance is larger of them to form an own cluster
+%    %% for ROIs in same session, check whether merging improves matching probability
+%    %% also, remove surely matched ROIs in one cluster from others (or rather, track, which ones are matched already
+%    
+%    c = 1;
+%    c_final = 0;
+%    
+%    nCluster = length(pre_clusters);
+%    
+%    disp('registering')
+%    while c < 2%length(pre_clusters)
+%    
+%      if mod(c,500)==0
+%        disp(sprintf('%d of %d done. (originally %d)',c,length(pre_clusters),nCluster))
+%      end
+%      
+%      %% remove already matched ROIs from pre_clusters
+%      pre_occupancy = zeros(h.data.nSes,1);
+%      for s = 1:h.data.nSes
+%        for n = pre_clusters(c).session(s).list
+%          if session(s).ROI(n).matched
+%            idx = find(pre_clusters(c).session(s).list==n);
+%            pre_clusters(c).session(s).list(idx) = [];
+%          end
+%        end
+%        pre_occupancy(s) = length(pre_clusters(c).session(s).list);
+%      end
+%      
+%      if nnz(pre_occupancy) < 2   %% only look at pre_clusterss, that actually have some matching possibilities
+%        pre_clusters(c) = [];
+%      else
+%        c_final = c_final + 1;
+%        n_ref = 0;
+%        s_ref = 0;
+%        
+%        %% merge status: for every neuron in the final_list, have 3 entries: previous, current and following session match status
+%        %% match status does not refer to matching to a certain neuron, but rather assigning to this pre_clusters!
+%        post_clusters(c_final) = struct('A',[],'centroid',[],'score',NaN,'ct',NaN,'session',struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[],'unsure',false)));
+%        
+%        for s = 1:h.data.nSes
+%        
+%          if length(pre_clusters(c).session(s).list)
+%            
+%            %% compare to last registered neuron (closest in time)
+%            %% also, compare to other ones if no fit found (or to overall pre_clusters?)
+%            
+%            if n_ref == 0   %% register new ROI as reference ROI
+%              %%% missing here: no merging in first session possible
+%              n = pre_clusters(c).session(s).list(1);
+%              post_clusters(c_final).session(s).list = n;
+%              
+%              %% set reference to first ROI detected
+%              n_ref = n;
+%              s_ref = s;
+%            else
+%              s
+%              xdata(s_ref,s).prob(n_ref,:)
+%              
+%              if strcmp(mode,'threshold')
+%                [matches_s, p_same_s] = get_matches(pre_clusters(c).session(s).list,xdata,0.05,s_ref,n_ref,s);
+%                
+%                [p_best_s,idx_s] = max(p_same_s)
+%                if p_best_s > p_thr
+%                  best_match_s = matches_s(idx_s);
+%                  
+%                  %% check for reciprocity
+%                  [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c).session(s_ref).list,xdata,0.05,s,best_match_s,s_ref);
+%                  [p_best_s_ref,idx_s_ref] = max(p_same_s_ref);
+%                  
+%                  if (matches_s_ref(idx_s_ref) == n_ref) && (p_best_s_ref > p_thr)
+%                    post_clusters(c_final).session(s).list = best_match_s;
+%                  end
+%                end
+%              
+%  %                if length(post_clusters(c_final).session(s).list)
+%  %                  %% allow more than one neuron to go here
+%  %                  n_ref = best_match_s;   %% this should include merging possibilities
+%  %                  s_ref = s;
+%  %                end
+%              %% matching due to most probable ROI (including merging etc)
+%              else
+%                
+%                %% check for matches with first detected ROI
+%                %% also, check for matches with most recently detected ROI
+%                [matches_s, p_same_s] = get_matches(pre_clusters(c),xdata,0.05,s_ref,n_ref,s);
+%                [~,idx_s] = max(p_same_s);
+%                best_match_s = matches_s(idx_s);
+%                
+%                for i=1:length(matches_s)
+%                %%% should only first best match (matches_s_ref) be considered? or also 2nd best?
+%                  [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c),xdata,0.05,s,matches_s(i),s_ref);
+%                  [~,idx_s_ref] = max(p_same_s_ref);
+%                  
+%                  if matches_s(i) == best_match_s && matches_s_ref(idx_s_ref) == n_ref    %% if they are each others favorites
+%                    %% additionally check, whether this probability is larger than ... something?!
+%                    if p_same_s_ref(idx_s_ref) > 0.05
+%                      post_clusters(c_final).match_status(s_ref,3) = true;
+%                      post_clusters(c_final).match_status(s,1) = true;
+%                      
+%                      if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+%                        idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+%                        post_clusters(c_final).list(s,idx) = matches_s(i);
+%                      end
+%                    end
+%                    
+%                  elseif matches_s(i) == best_match_s                 %% if chosen ROI rather matches with another one
+%                  %% do not match!! (or rather: how much different are they? look for merging possibility?)
+%                  %%% here, should check for 2nd best match
+%                    if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% really wants to match another one -> do not include in this pre_clusters (very rare)
+%                      change_ct = change_ct + 1;
+%                    else                                           %% if there might be a chance of both matching -> merge?
+%                      post_clusters(c_final).match_status(s_ref,2:3) = true;
+%                      post_clusters(c_final).match_status(s,1) = true;
+%                      merge_ct = merge_ct + 1;
+%                      if ~ismember(matches_s_ref(idx_s_ref),post_clusters(c_final).list(s_ref,:))
+%                        idx = nnz(post_clusters(c_final).list(s_ref,:)) + 1;
+%                        post_clusters(c_final).list(s_ref,idx) = matches_s_ref(idx_s_ref);
+%                      end
+%                      if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+%                        idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+%                        post_clusters(c_final).list(s,idx) = matches_s(i);
+%                      end
+%                    end
+%                    
+%                  elseif matches_s_ref(idx_s_ref) == n_ref
+%                    if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% if probabilities far exceed, change match
+%                      post_clusters(c_final).match_status(s_ref,3) = true;
+%  %                        post_clusters(c_final).list(s,:) = 0;
+%                      if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+%                        idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+%                        post_clusters(c_final).list(s,idx) = matches_s(i);
+%                        post_clusters(c_final).match_status(s,1) = true;
+%                      end
+%                      switch_ct = switch_ct + 1;
+%                    else
+%                      
+%                      merge2_ct = merge2_ct + 1;
+%                      post_clusters(c_final).match_status(s,2) = true;
+%                      if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
+%                        idx = nnz(post_clusters(c_final).list(s,:)) + 1;
+%                        post_clusters(c_final).list(s,idx) = matches_s(i);
+%                      end
+%                    end
+%                    best_match_s = matches_s(i);
+%                  end
+%                  
+%                end
+%                
+%                if any(post_clusters(c_final).list(s,:))
+%                  %% allow more than one neuron to go here
+%                  n_ref_alt = best_match_s;   %% this should include merging possibilities
+%                  s_ref_alt = s;
+%                end
+%              end
+%            end
+%          end
+%        end
+%        
+%  %        %% obtain and calculate values for ROI score
+%  %        score = prepare_ROI_score(post_clusters(c_final),ROI_data,xdata);
+%  %        
+%  %        post_clusters(c_final) = ROI_cleanup(post_clusters(c_final),score,c_final,ROI_data);
+%  %        post_clusters(c_final).score = get_ROI_score(post_clusters(c_final),score,0);
+%  %        
+%  %        %%% filling gaps in ROI cluster should be done in other function for all ROIs > certain score and ct
+%  %        %%% it should...
+%  %        %%% 1. crop out region that encloses all ROIs from this cluster + some margin
+%  %        %%% 2. find all closeby ROIs (also from other clusters)
+%  %        %%%   2.1. check if there is a single ROI, that might have been sorted out but belongs to this cluster- if so, remove!
+%  %        %%% 3. initiate CNMF with initial guess of closeby ROIs + region covered by this cluster (+ some margin)
+%  %        %%% 4. if new ROI is found, implement this one + its Ca-trace in data
+%  %        %%%   4.1 if no new ROI is found, remark this one as "non-active" (or just apply average ROI from neighbouring sessions and get Ca-trace from simple filter application (- background) - check, if active or not)
+%  %        
+%  %        
+%  %        %% here, implement checking for ROI score and removing/merging/splitting accordingly
+%  %        
+%  %        %% score: high average and minimum probability, bias towards large number of neurons in one pre_clusters
+%  %        %% check: removing one ROI from pre_clusters: does it increase or decrease the "score"?
+%  %        %% or: possible to create subset from pre_clusters that has high average and minimum probability?
+%  %        
+%  %        %% only now, after removing "substandard matches" from the pre_clusters, assign "matched" status to all
+%  %          
+%        %% assign matched status to all within pre_clusters
+%        occupancy = zeros(h.data.nSes,1);
+%        for s = 1:h.data.nSes
+%          for i = 1:length(post_clusters(c_final).session(s).list)
+%            n = post_clusters(c_final).session(s).list(i);
+%            session(s).ROI(n).matched = true;
+%          end
+%          occupancy(s) = length(post_clusters(c_final).session(s).list);
+%        end
+%        
+%        post_clusters(c_final).ct = nnz(occupancy);
+%        if post_clusters(c_final).ct < 2
+%          post_clusters(c_final) = [];
+%          c_final = c_final - 1;
+%        elseif ~all(pre_occupancy==occupancy) %% in the end, create new pre_clusters from remaining ROIs and append to pre_clusters struct
+%        
+%          c_idx = length(pre_clusters)+1;
+%          pre_clusters(c_idx).session = struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[]));
+%  %          pre_clusters(c_idx).ID = c_idx;
+%          
+%          for s = 1:h.data.nSes
+%            pre_clusters(c_idx).session(s).list = setdiff(pre_clusters(c).session(s).list,post_clusters(c_final).session(s).list);
+%            if isempty(pre_clusters(c_idx).session(s).list)
+%              pre_clusters(c_idx).session(s).list = [];
+%            end
+%            occupancy(s) = length(pre_clusters(c_idx).session(s).list);
+%          end
+%          
+%          if nnz(occupancy) < 2
+%            pre_clusters(c_idx) = [];
+%          end
+%        end
+%        
+%        c = c+1;
+%      end
+%    end
+%    
+%  %    %%% fill up cluster_neuron arrays to cover all clusters
+%  %    for s = 1:nSes
+%  %      if length(ROI_data(s).cluster_neuron) < c_final
+%  %        session(s).cluster_neuron(c_final) = 0;
+%  %      end
+%  %  %        [s length(ROI_data(s).cluster_neuron)]
+%  %  %        ROI_data(s).cluster_neuron = cat(1,ROI_data(s).cluster_neuron',zeros(c_final - length(ROI_data(s).cluster_neuron),1))
+%  %      [s size(session(s).cluster_neuron)]
+%  %    end
+%    
+%  %    nMatches = [post_clusters.ct];
+%  %    disp(sprintf('merging attempts: %d',merge_ct))
+%  %    disp(sprintf('real merges to be done: %d',merge_ct_real))
+%  %  %      disp(sprintf('number of session-matchings: %d',sesmatch))
+%  %  %      disp(sprintf('polygamous ROIs: %d',polygamy))
+%  %  %      disp('matching done')
+%  %    fig_ses = figure('position',[100 100 800 400]);
+%  %    histogram(nMatches)
+%  %    xlabel('# sessions detected')
+%  %    ylabel('# matched ROIs')
+%    
+%  %    hist_matches = hist(nMatches);
+%  %    text(0.6,0.9,sprintf('# stable ROIs (s>=3): %d',sum(hist_matches(3:end))),'units','normalized','FontSize',14)
+%    
+%    setappdata(0,'clusters',post_clusters)
+%  end
+
+
+
+function real_matching(h,p_thr)
   
   xdata = getappdata(0,'xdata');
   mode = 'threshold';
 %      mode = 'other';
   
-  %% now, go through all clusters and assign surely matching ROIs to each other (p_same>0.95)
-  %%% here, implementing footprints in the matching process should help/improve the results quite a bit
+  c = 0;
   
-  %% afterwards, check chance of others belonging to the same cluster or whether chance is larger of them to form an own cluster
-  %% for ROIs in same session, check whether merging improves matching probability
-  %% also, remove surely matched ROIs in one cluster from others (or rather, track, which ones are matched already
-  
-%    merge_ct = 0;
-%    merge2_ct = 0;
-%    merge_ct_real = 0;
-  c = 1;
-  c_final = 0;
-%    change_ct = 0;
-%    switch_ct = 0;
-%    A_thr = 400;
-  
-  nCluster = length(pre_clusters);
+  session(h.data.nSes) = struct;
+  for s = 1:h.data.nSes
+    session(s).ROI_matched = false(h.data.session(s).nROI,1);
+  end
   
   disp('registering')
-  while c < length(pre_clusters)
   
-    if mod(c,500)==0
-      disp(sprintf('%d of %d done. (originally %d)',c,length(pre_clusters),nCluster))
-    end
+  for s = 1:h.data.nSes
     
-    %% remove already matched ROIs from pre_clusters
-    pre_occupancy = zeros(h.data.nSes,1);
-    for s = 1:h.data.nSes
-      for n = pre_clusters(c).session(s).list
-        if session(s).ROI(n).matched
-          idx = find(pre_clusters(c).session(s).list==n);
-          pre_clusters(c).session(s).list(idx) = [];
+    for n = 1:h.data.session(s).nROI
+      
+      if ~session(s).ROI_matched(n)
+        
+        c = c + 1;
+        clusters(c) = struct('A',[],'centroid',[],'score',NaN,'ct',NaN,'session',struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[],'unsure',false)));
+        
+        clusters(c).session(s).list = n;
+        
+        if mod(c,500)==0
+          disp(sprintf('%d clusters found.',c))
         end
-      end
-      pre_occupancy(s) = length(pre_clusters(c).session(s).list);
-    end
-    
-    if nnz(pre_occupancy) < 2   %% only look at pre_clusterss, that actually have some matching possibilities
-      pre_clusters(c) = [];
-    else
-      c_final = c_final + 1;
-      n_ref = 0;
-      s_ref = 0;
-      
-      %% merge status: for every neuron in the final_list, have 3 entries: previous, current and following session match status
-      %% match status does not refer to matching to a certain neuron, but rather assigning to this pre_clusters!
-      post_clusters(c_final) = struct('A',[],'centroid',[],'score',NaN,'ct',NaN,'session',struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[])));
-      
-      for s = 1:h.data.nSes
-      
-        if length(pre_clusters(c).session(s).list)
+        
+        for sm = 1:h.data.nSes
+          if s==sm
+            continue
+          end
           
-          %% compare to last registered neuron (closest in time)
-          %% also, compare to other ones if no fit found (or to overall pre_clusters?)
-          
-          if n_ref == 0   %% register new ROI as reference ROI
-            %%% missing here: no merging in first session possible
-            n = pre_clusters(c).session(s).list(1);
-            post_clusters(c_final).session(s).list = n;
+          if strcmp(mode,'threshold')
             
-            %% set reference to first ROI detected
-            n_ref = n;
-            s_ref = s;
-          else
+            matches_s = find(xdata(s,sm).prob(n,:)>p_thr);
+            p_same_s = xdata(s,sm).prob(n,matches_s);
             
-            if strcmp(mode,'threshold')
-              [matches_s, p_same_s] = get_matches(pre_clusters(c).session(s).list,xdata,0.05,s_ref,n_ref,s);
-              
-              [p_best_s,idx_s] = max(p_same_s);
-              if p_best_s > p_thr
-                best_match_s = matches_s(idx_s);
-                
-                %% check for reciprocity
-                [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c).session(s_ref).list,xdata,0.05,s,best_match_s,s_ref);
-                [p_best_s_ref,idx_s_ref] = max(p_same_s_ref);
-                if (matches_s_ref(idx_s_ref) == n_ref) && (p_best_s_ref > p_thr)
-                  post_clusters(c_final).session(s).list = best_match_s;
-                end
-              end
-            
-%                if length(post_clusters(c_final).session(s).list)
-%                  %% allow more than one neuron to go here
-%                  n_ref = best_match_s;   %% this should include merging possibilities
-%                  s_ref = s;
-%                end
-            %% matching due to most probable ROI (including merging etc)
-            else
-              
-              %% check for matches with first detected ROI
-              %% also, check for matches with most recently detected ROI
-              [matches_s, p_same_s] = get_matches(pre_clusters(c),xdata,0.05,s_ref,n_ref,s);
-              [~,idx_s] = max(p_same_s);
+            [p_best_s,idx_s] = max(p_same_s);
+            if p_best_s > p_thr
               best_match_s = matches_s(idx_s);
               
-              for i=1:length(matches_s)
-              %%% should only first best match (matches_s_ref) be considered? or also 2nd best?
-                [matches_s_ref, p_same_s_ref] = get_matches(pre_clusters(c),xdata,0.05,s,matches_s(i),s_ref);
-                [~,idx_s_ref] = max(p_same_s_ref);
-                
-                if matches_s(i) == best_match_s && matches_s_ref(idx_s_ref) == n_ref    %% if they are each others favorites
-                  %% additionally check, whether this probability is larger than ... something?!
-                  if p_same_s_ref(idx_s_ref) > 0.05
-                    post_clusters(c_final).match_status(s_ref,3) = true;
-                    post_clusters(c_final).match_status(s,1) = true;
-                    
-                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
-                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
-                      post_clusters(c_final).list(s,idx) = matches_s(i);
-                    end
-                  end
-                  
-                elseif matches_s(i) == best_match_s                 %% if chosen ROI rather matches with another one
-                %% do not match!! (or rather: how much different are they? look for merging possibility?)
-                %%% here, should check for 2nd best match
-                  if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% really wants to match another one -> do not include in this pre_clusters (very rare)
-                    change_ct = change_ct + 1;
-                  else                                           %% if there might be a chance of both matching -> merge?
-                    post_clusters(c_final).match_status(s_ref,2:3) = true;
-                    post_clusters(c_final).match_status(s,1) = true;
-                    merge_ct = merge_ct + 1;
-                    if ~ismember(matches_s_ref(idx_s_ref),post_clusters(c_final).list(s_ref,:))
-                      idx = nnz(post_clusters(c_final).list(s_ref,:)) + 1;
-                      post_clusters(c_final).list(s_ref,idx) = matches_s_ref(idx_s_ref);
-                    end
-                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
-                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
-                      post_clusters(c_final).list(s,idx) = matches_s(i);
-                    end
-                  end
-                  
-                elseif matches_s_ref(idx_s_ref) == n_ref
-                  if (p_same_s_ref(idx_s_ref) - p_same_s(idx_s) > 0.5)  %% if probabilities far exceed, change match
-                    post_clusters(c_final).match_status(s_ref,3) = true;
-%                        post_clusters(c_final).list(s,:) = 0;
-                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
-                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
-                      post_clusters(c_final).list(s,idx) = matches_s(i);
-                      post_clusters(c_final).match_status(s,1) = true;
-                    end
-                    switch_ct = switch_ct + 1;
-                  else
-                    
-                    merge2_ct = merge2_ct + 1;
-                    post_clusters(c_final).match_status(s,2) = true;
-                    if ~ismember(matches_s(i),post_clusters(c_final).list(s,:))
-                      idx = nnz(post_clusters(c_final).list(s,:)) + 1;
-                      post_clusters(c_final).list(s,idx) = matches_s(i);
-                    end
-                  end
-                  best_match_s = matches_s(i);
-                end
-                
-              end
+              %% check for reciprocity
+              matches_s_ref = find(xdata(sm,s).prob(best_match_s,:)>p_thr);
+              p_same_s_ref = xdata(sm,s).prob(best_match_s,matches_s_ref);
               
-              if any(post_clusters(c_final).list(s,:))
-                %% allow more than one neuron to go here
-                n_ref_alt = best_match_s;   %% this should include merging possibilities
-                s_ref_alt = s;
+              [p_best_s_ref,idx_s_ref] = max(p_same_s_ref);
+              
+              if (matches_s_ref(idx_s_ref) == n) && (p_best_s_ref > p_thr)% && ~session(sm).ROI_matched(best_match_s)
+                clusters(c).session(sm).list = best_match_s;
               end
             end
           end
         end
-      end
-      
-%        %% obtain and calculate values for ROI score
-%        score = prepare_ROI_score(post_clusters(c_final),ROI_data,xdata);
-%        
-%        post_clusters(c_final) = ROI_cleanup(post_clusters(c_final),score,c_final,ROI_data);
-%        post_clusters(c_final).score = get_ROI_score(post_clusters(c_final),score,0);
-%        
-%        %%% filling gaps in ROI cluster should be done in other function for all ROIs > certain score and ct
-%        %%% it should...
-%        %%% 1. crop out region that encloses all ROIs from this cluster + some margin
-%        %%% 2. find all closeby ROIs (also from other clusters)
-%        %%%   2.1. check if there is a single ROI, that might have been sorted out but belongs to this cluster- if so, remove!
-%        %%% 3. initiate CNMF with initial guess of closeby ROIs + region covered by this cluster (+ some margin)
-%        %%% 4. if new ROI is found, implement this one + its Ca-trace in data
-%        %%%   4.1 if no new ROI is found, remark this one as "non-active" (or just apply average ROI from neighbouring sessions and get Ca-trace from simple filter application (- background) - check, if active or not)
-%        
-%        
-%        %% here, implement checking for ROI score and removing/merging/splitting accordingly
-%        
-%        %% score: high average and minimum probability, bias towards large number of neurons in one pre_clusters
-%        %% check: removing one ROI from pre_clusters: does it increase or decrease the "score"?
-%        %% or: possible to create subset from pre_clusters that has high average and minimum probability?
-%        
-%        %% only now, after removing "substandard matches" from the pre_clusters, assign "matched" status to all
-%          
-      %% assign matched status to all within pre_clusters
-      occupancy = zeros(h.data.nSes,1);
-      for s = 1:h.data.nSes
-        for i = 1:length(post_clusters(c_final).session(s).list)
-          n = post_clusters(c_final).session(s).list(i);
-          session(s).ROI(n).matched = true;
-        end
-        occupancy(s) = length(post_clusters(c_final).session(s).list);
-      end
-      
-      post_clusters(c_final).ct = nnz(occupancy);
-      if post_clusters(c_final).ct < 2
-        post_clusters(c_final) = [];
-        c_final = c_final - 1;
-      elseif ~all(pre_occupancy==occupancy) %% in the end, create new pre_clusters from remaining ROIs and append to pre_clusters struct
-      
-        c_idx = length(pre_clusters)+1;
-        pre_clusters(c_idx).session = struct('list',cell(h.data.nSes,1),'ROI',struct('score',[],'mean_score',[]));
-%          pre_clusters(c_idx).ID = c_idx;
         
-        for s = 1:h.data.nSes
-          pre_clusters(c_idx).session(s).list = setdiff(pre_clusters(c).session(s).list,post_clusters(c_final).session(s).list);
-          if isempty(pre_clusters(c_idx).session(s).list)
-            pre_clusters(c_idx).session(s).list = [];
+%        %% assign matched status to all within pre_clusters
+        occupancy = zeros(h.data.nSes,1);
+        for sm = 1:h.data.nSes
+          for i = 1:length(clusters(c).session(sm).list)
+            n = clusters(c).session(sm).list(i);
+            clusters(c).session(sm).ROI(i).unsure = false;
+            session(sm).ROI_matched(n) = true;
           end
-          occupancy(s) = length(pre_clusters(c_idx).session(s).list);
+          occupancy(sm) = length(clusters(c).session(sm).list);
         end
         
-        if nnz(occupancy) < 2
-          pre_clusters(c_idx) = [];
+        clusters(c).ct = nnz(occupancy);
+        if clusters(c).ct < 2
+          clusters(c) = [];
+          c = c - 1;
         end
+        
       end
-      
-      c = c+1;
     end
   end
   
-%    %%% fill up cluster_neuron arrays to cover all clusters
-%    for s = 1:nSes
-%      if length(ROI_data(s).cluster_neuron) < c_final
-%        session(s).cluster_neuron(c_final) = 0;
-%      end
-%  %        [s length(ROI_data(s).cluster_neuron)]
-%  %        ROI_data(s).cluster_neuron = cat(1,ROI_data(s).cluster_neuron',zeros(c_final - length(ROI_data(s).cluster_neuron),1))
-%      [s size(session(s).cluster_neuron)]
-%    end
+  setappdata(0,'clusters',clusters)
+  clusters
   
-  nMatches = [post_clusters.ct];
-  disp(sprintf('number of ROI_clusters: %d',c_final))
-%    disp(sprintf('merging attempts: %d',merge_ct))
-%    disp(sprintf('real merges to be done: %d',merge_ct_real))
-%  %      disp(sprintf('number of session-matchings: %d',sesmatch))
-%  %      disp(sprintf('polygamous ROIs: %d',polygamy))
-%  %      disp('matching done')
-%    fig_ses = figure('position',[100 100 800 400]);
-%    histogram(nMatches)
-%    xlabel('# sessions detected')
-%    ylabel('# matched ROIs')
-  
-%    hist_matches = hist(nMatches);
-%    text(0.6,0.9,sprintf('# stable ROIs (s>=3): %d',sum(hist_matches(3:end))),'units','normalized','FontSize',14)
-  
-  setappdata(0,'clusters',post_clusters)
-  
+end
+
+
 
 
 function [n, p_same] = get_matches(n,xdata,p_thr,s_ref,n_ref,s)
@@ -2401,25 +3868,28 @@ function [n, p_same] = get_matches(n,xdata,p_thr,s_ref,n_ref,s)
   mask = p_same>p_thr;
   n = n(mask);
   p_same = p_same(mask);
-  
+end
   
   
 
-function h = cluster2handle(h,clusters)
+
+function [disallowRotation] = myRotateFilter(hObject,eventdata)
   
-  for s = 1:h.data.nSes
-    h.data.session(s).ROI = struct('cluster_ID',cell(h.data.session(s).nROI,1));
+  disallowRotation = false;
+  % if a ButtonDownFcn has been defined for the object, then use that
+  if isfield(get(hObject),'ButtonDownFcn')
+    disallowRotation = ~isempty(get(hObject,'ButtonDownFcn'));
   end
+end
+
+
+
+function [corr_1w] = get_1w_corr(ROI_n,ROI_m)
+  A_n = reshape(ROI_n.A,[],1);
+  A_m = reshape(ROI_m.A,[],1);
   
-  h.data.nCluster = length(clusters);
-  for c = 1:h.data.nCluster
-    h.data.clusters(c).session = struct('list',cell(h.data.nSes,1));
-    
-    for s = 1:h.data.nSes
-      h.data.clusters(c).session(s).list = clusters(c).session(s).list;
-      
-      for n = h.data.clusters(c).session(s).list
-        h.data.session(s).ROI(n).cluster_ID = [h.data.session(s).ROI(n).cluster_ID c];
-      end
-    end
-  end
+  idx_n = find(A_n);
+  
+  corr_1w = full(dot(A_n(idx_n),A_m(idx_n))/(ROI_n.norm*norm(A_m(idx_n))));
+end
+  
