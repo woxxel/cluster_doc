@@ -174,12 +174,15 @@ classdef ROI_matching < handle
       t_sec = mod(h.t.now,60);
       t_min = mod(floor(h.t.now/60),60);
       t_h = floor(h.t.now/(60*60));
-      str = sprintf('Time since start: %02d:%02d:%02d sec.',t_h,t_min,round(t_sec));
+      str = sprintf('Time since start: %02d:%02d:%02d',t_h,t_min,round(t_sec));
       set(h.uihandles.text_time_passed,'String',str)
       
       clusters_done = nnz(h.status.processed) + nnz(h.status.deleted);
       sec_per_cluster = h.t.now/clusters_done;
       t_eta = (h.data.nCluster-clusters_done)*sec_per_cluster;
+      
+      str_time_per_cluster = sprintf('Time per cluster: %02d sec',round(sec_per_cluster));
+      set(h.uihandles.text_time_per_cluster,'String',str_time_per_cluster)
       
       t_eta_sec = mod(t_eta,60);
       t_eta_min = mod(floor(t_eta/60),60);
@@ -2348,6 +2351,10 @@ classdef ROI_matching < handle
           if ~strcmp(h.status.mark,'') && strcmp(get(h.uihandles.button_choose_ROIs_done,'enable'),'on')
             h.button_choose_ROIs_done_Callback([],[])
           end
+        case 'backspace'
+          if ~isempty(h.c_disp.active.picked.cluster)
+            h.button_multi_remove_IDs_Callback([],[])
+          end
       end
     end
 
@@ -2542,7 +2549,7 @@ classdef ROI_matching < handle
       xdata = getappdata(0,'xdata');
       h.clear_ID(xdata,c,s,n);
       
-      h.DUF_cluster_status(c);
+      h.clusters(c).DUF_cluster_status(h);
       h.PUF_assignment_stats(obj,c)
       
     end
@@ -2890,11 +2897,11 @@ classdef ROI_matching < handle
             
             disp(sprintf('-------------------- manipulation #%d ----------------------',i))
             
-            footprints = getappdata(0,'footprints');
-            imSize = footprints.data.imSize;
+%              footprints = getappdata(0,'footprints');
+%              imSize = footprints.data.imSize;
             
-            pre = struct;
-            post = struct;
+%              pre = struct;
+%              post = struct;
             
             pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
             h5file = dir(pathcat(pathSession,'*.h5'));
@@ -2911,14 +2918,14 @@ classdef ROI_matching < handle
             %% get all previously assigned cluster IDs to assign to new ones
             
             
-            for j = 1:length(h.status.manipulate(i).pre)
-              n = h.status.manipulate(i).pre(j).ID(2);
-              pre(j).C2 = Ca_mat.C2(n,:);
-            end
-            for j = 1:length(h.status.manipulate(i).post)
-              sm = h.status.manipulate(i).post(j).ID(1);
-              m = h.status.manipulate(i).post(j).ID(2);
-            end
+%              for j = 1:length(h.status.manipulate(i).pre)
+%                n = h.status.manipulate(i).pre(j).ID(2);
+%                pre(j).C2 = Ca_mat.C2(n,:);
+%              end
+%              for j = 1:length(h.status.manipulate(i).post)
+%                sm = h.status.manipulate(i).post(j).ID(1);
+%                m = h.status.manipulate(i).post(j).ID(2);
+%              end
             
             switch h.status.manipulate(i).type
               case 'merge'
