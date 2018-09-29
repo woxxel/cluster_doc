@@ -24,7 +24,7 @@ classdef cluster_class < handle
     
     status            = struct('calc_shape',false,'calc_stats',false,'calc_status',false,'calc_occupancy',false,...
                              'manipulated',false,'deleted',false,...   % x
-                             'merge_ct',0,'split_ct',0,...
+                             'merge',false,'split',false,...
                              'whelpling',false)                               % x
     
     stats             = struct('occupancy',[],'polyROI',[],'multiROI',[],...
@@ -68,11 +68,6 @@ classdef cluster_class < handle
             else
               this(c).session(s).ROI = clusters(c).session(s).ROI;
             end
-          end
-          
-          if isfield(clusters,'status')
-            this(c).status.merge_ct = clusters(c).status.merge_ct;
-            this(c).status.split_ct = clusters(c).status.split_ct;
           end
           
           if ~isempty(status)
@@ -148,6 +143,8 @@ classdef cluster_class < handle
       
       this.stats.polyROI = zeros(this.nSes,1);
       this.status.manipulated = false;
+      this.status.merge = false;
+      this.status.split = false;
       
       for s = 1:this.nSes
         for n = this.session(s).list
@@ -155,6 +152,10 @@ classdef cluster_class < handle
           this.stats.polyROI(s) = max(this.stats.polyROI(s),polyROI);       %% if more than 1 neuron in session
           
           this.status.manipulated = this.status.manipulated || h.status.session(s).manipulated(n);
+          
+          this.status.merge = this.status.merge || h.status.session(s).merge_ct(n);
+          this.status.split = this.status.split || h.status.session(s).split_ct(n);
+          
         end
       end
       this.status.calc_status = true;
