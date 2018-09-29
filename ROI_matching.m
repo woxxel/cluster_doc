@@ -2440,7 +2440,6 @@ classdef ROI_matching < handle
     
     
     function choose_cluster(h,obj,c)
-    
       
       if isempty(c) || isnan(c) || c < 1 || c > h.data.nCluster
         c = [];
@@ -3000,17 +2999,23 @@ classdef ROI_matching < handle
             %% find closeby pre-footprints  
             IDs = cat(1,h.status.manipulate(i).pre.ID);
             for n = 1:footprints.data.session(s).nROI
-              if ~ismember(n,IDs(:,2))
-                A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
-                if nnz(A_tmp) > 10;
-                  A_in.ct = A_in.ct + 1;
-                  A_in.footprint(:,:,A_in.ct) = full(A_tmp);
-                  A_in.status(A_in.ct) = false;
+              if ~ismember(n,IDs(:,2)) && ~h.status.session(s).deleted(n)
+%  %                  footprints.session(s).ROI(n).A
+%  %                  [s n]
+                if isempty(footprints.session(s).ROI(n).A)
+                  disp('removing')
+                  [s n]
+                  h.remove_ROI(s,n)
+                else
+                  A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
+                  if nnz(A_tmp) > 10;
+                    A_in.ct = A_in.ct + 1;
+                    A_in.footprint(:,:,A_in.ct) = full(A_tmp);
+                    A_in.status(A_in.ct) = false;
+                  end
                 end
               end
             end
-            
-            
             for j = 1:A_in.ct
               A_norm = A_in.footprint(:,:,j)/sum(sum(A_in.footprint(:,:,j)));
               A_in.centroid(j,:) = [sum((1:d1)*A_norm),sum(A_norm*(1:d2)')];
@@ -3037,6 +3042,8 @@ classdef ROI_matching < handle
           end
         end
       end
+      clear Y
+      clear footprints
       set(hObject,'enable','on')
     end
     
@@ -3095,7 +3102,7 @@ classdef ROI_matching < handle
           baseline = prctile(C_tmp,5);
           C_tmp = C_tmp - baseline;
           C_tmp = C_tmp/max(C_tmp);
-          plot(ax_Ca_post,time_arr,(j-1)+C_tmp,col,'LineWidth',0.8)
+          plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'k:','LineWidth',0.8)
         else
           col = 'g';
         end
