@@ -127,6 +127,7 @@ classdef ROI_matching < handle
         set(h.uihandles.table_ROI_manipulation,'ColumnName',{'' 'ROI ID' 'type' 'to shape of...'})
         set(h.uihandles.table_ROI_manipulation,'ColumnWidth',{[30],[100],[50],[110]})
         set(h.uihandles.table_ROI_manipulation,'Data',cell(0,4),'Visible','off')
+        set(h.uihandles.checkbox_table_display_processed,'Callback',@h.checkbox_table_display_processed_Callback)
         
         set(h.uihandles.table_ROI_manipulation,'CellSelectionCallback',@h.table_menu_CellSelectionCallback)
         set(h.uihandles.button_run_manipulation,'Callback',@h.button_run_manipulation_Callback,'enable','off')
@@ -944,6 +945,7 @@ classdef ROI_matching < handle
           set(h.plots.cluster_handles(c),'LineStyle','-','LineWidth',h.clusters(c).plot.thickness)
         end
       end
+      h.PUF_match_stats()
       set(h.uihandles.button_save,'enable','on')
     end
     
@@ -1216,7 +1218,9 @@ classdef ROI_matching < handle
           h.status.manipulate(idx).type = 'merge';
           h.status.manipulate(idx).processed = false;
           
-          if h.check_manipulate(h.status.manipulate(idx))
+          status = h.check_already_manipulate(idx);
+          
+          if h.check_manipulate(h.status.manipulate(idx)) && status
             h.status.manipulate_ct = idx;
             
             for i = 1:length(h.status.manipulate(idx).pre)
@@ -1258,7 +1262,9 @@ classdef ROI_matching < handle
           h.status.manipulate(idx).type = 'split';
           h.status.manipulate(idx).processed = false;
           
-          if h.check_manipulate(h.status.manipulate(idx))
+          status = h.check_already_manipulate(idx);
+          
+          if h.check_manipulate(h.status.manipulate(idx)) && status
             h.status.manipulate_ct = idx;
             
             for i = 1:length(h.status.manipulate(idx).pre)
@@ -1296,10 +1302,36 @@ classdef ROI_matching < handle
     end
     
     
-    function good = check_manipulate(h,test)
+    function status = check_already_manipulate(h,idx)
+      
+      status = true;
+      for j = 1:length(h.status.manipulate(idx).pre)
+        
+        s = h.status.manipulate(idx).pre(j).ID(1);
+        n = h.status.manipulate(idx).pre(j).ID(2);
+        
+        if h.status.session(s).merge_ct(n) || h.status.session(s).split_ct(n)
+          questdlg('ROI is already being manipulated. Do you want to go on?', ...
+                  'ROI manipulation conflict', ...
+                  'Yes','No','No');
+          switch answer
+            case 'No'
+              status = false;
+              return
+            case 'Yes'
+              status = true;
+          end
+        end
+        
+      end
+      
+    end
+      
+    
+    function status = check_manipulate(h,test)
       
       footprints = getappdata(0,'footprints');
-      good = true;
+      status = true;
       
       switch h.status.mark
         case 'merge_post'
@@ -1312,7 +1344,7 @@ classdef ROI_matching < handle
             m = test.pre(2).ID(2);
             
             if ~nnz(footprints.session(sm).ROI(m).A(find(footprints.session(s).ROI(n).A)))
-              good = false;
+              status = false;
               return
             end
             
@@ -1325,7 +1357,7 @@ classdef ROI_matching < handle
               n = test.pre(idx).ID(2);
               
               if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
-                good = false;
+                status = false;
                 return
               end
             end
@@ -1339,7 +1371,7 @@ classdef ROI_matching < handle
             n = test.post(idx).ID(2);
             
             if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
-              good = false;
+              status = false;
               return
             end
           end
@@ -1356,33 +1388,46 @@ classdef ROI_matching < handle
         set(h.uihandles.button_run_manipulation,'enable','off')
       else
         
-        for idx = 1:h.status.manipulate_ct
+        idx = 0;
+        for i = 1:h.status.manipulate_ct
           
-          table_data{idx,1} = h.status.manipulate(idx).processed;
+          if ~get(h.uihandles.checkbox_table_display_processed,'Value') && h.status.manipulate(i).processed
+            continue
+          end
           
-          ROIs_pre = h.status.manipulate(idx).pre;
+          if isempty(h.status.manipulate(i).type)
+            h.status.manipulate(i) = [];
+            h.status.manipulate_ct = h.status.manipulate_ct - 1;
+            continue
+          end
+          idx = idx + 1;
+          table_data{idx,1} = h.status.manipulate(i).processed;
+          
+          ROIs_pre = h.status.manipulate(i).pre;
           
           str = '';
-          for i = 1:length(ROIs_pre)
-            str = sprintf('%s%d(%d)',str,ROIs_pre(i).ID(2),ROIs_pre(i).ID(1));
-            if i < length(ROIs_pre)
+          for j = 1:length(ROIs_pre)
+            str = sprintf('%s%d(%d)',str,ROIs_pre(j).ID(2),ROIs_pre(j).ID(1));
+            if j < length(ROIs_pre)
               str = sprintf('%s, ',str);
             end
           end
           table_data{idx,2} = str;
-          table_data{idx,3} = h.status.manipulate(idx).type;
+          table_data{idx,3} = h.status.manipulate(i).type;
 
-          ROIs_post = h.status.manipulate(idx).post;
+          ROIs_post = h.status.manipulate(i).post;
+          
 
-          switch h.status.manipulate(idx).type
+          
+          switch h.status.manipulate(i).type
             case 'merge'
-              if isempty(h.status.manipulate(idx).post)
+              if isempty(h.status.manipulate(i).post)
                 table_data{idx,4} = 'compound';
               else
                 table_data{idx,4} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
               end
             case 'split'
-              if length(h.status.manipulate(idx).post) == 1
+              if length(h.status.manipulate(i).post) == 1
                 table_data{idx,4} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
               else
                 table_data{idx,4} = sprintf('%d(%d), %d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1),ROIs_post(2).ID(2),ROIs_post(2).ID(1));
@@ -1392,12 +1437,18 @@ classdef ROI_matching < handle
             case 'add'
               disp('nothing in here')
           end
+          
         end
         
         set(h.uihandles.table_ROI_manipulation,'Visible','on','Data',table_data)
         set(h.uihandles.button_run_manipulation,'enable','on')
         h.create_table_menu()
       end
+    end
+    
+    
+    function checkbox_table_display_processed_Callback(h,hObject,eventdata)
+      h.update_table()
     end
     
     
@@ -1722,33 +1773,8 @@ classdef ROI_matching < handle
 
 
     %%% ------------------------------ start: data updating functions (DUF) ------------------------------%%%
-
-
-    function init_data(h)
-
-%        h.data.nCluster = 200; %% only for testing to restrict number of loaded clusters
-      
-      
-      
-%        h.plots.cluster = struct('thickness',cell(h.data.nCluster,1),'color',cell(h.data.nCluster,1));
-      
-%        h.data.ct = zeros(h.data.nCluster,1);
-%        h.data.score = zeros(h.data.nCluster,1);
-      
-%        h.status.active = true(h.data.nCluster,1);
-%        h.status.cluster_multiROI = false(h.data.nCluster,1);
-%        h.status.cluster_polyROI = false(h.data.nCluster,1);
-      
-      %% first run of updating data for all
-%        
-%        disp(sprintf('number of ROI_clusters: %d',h.data.nCluster))
-%        disp(sprintf('number of real ROI_clusters: %d',sum(h.data.ct > 1)))
-      
-%        clusters = getappdata(0,'clusters');
-%        h.data.cluster_centroids = cat(1,clusters.centroid);
-      
-    end
-
+  
+  
       
       
     %%% ------------------------------- end: data updating functions -------------------------------%%%
@@ -1779,15 +1805,24 @@ classdef ROI_matching < handle
       set(h.uihandles.ax_cluster_overview,'ButtonDownFcn',@h.ButtonDown_pickCluster,'Hittest','on','PickableParts','All');
       
       %% plot overall stats
-      h.plots.histo_ct = histogram(h.uihandles.ax_matchstats1,h.data.ct(~h.status.deleted));
+      dat = rand(h.data.nSes,2);
+      h.plots.histo_ct = bar(h.uihandles.ax_matchstats1,linspace(1,h.data.nSes,h.data.nSes),dat,'stacked');
+      h.plots.histo_ct(1).FaceColor = 'b';
+      h.plots.histo_ct(2).FaceColor = 'r';
       xlim(h.uihandles.ax_matchstats1,[0,16])
       xlabel(h.uihandles.ax_matchstats1,'# Sessions')
       ylabel(h.uihandles.ax_matchstats1,'# clusters')
       
-      h.plots.histo_score = histogram(h.uihandles.ax_matchstats2,h.data.score(~h.status.deleted),linspace(0,1,21));
-      xlim(h.uihandles.ax_matchstats2,[0,1])
+      dat = rand(21,2);
+      h.plots.histo_score = bar(h.uihandles.ax_matchstats2,linspace(0,1,21),dat,'stacked');
+      h.plots.histo_score(1).FaceColor = 'b';
+      h.plots.histo_score(2).FaceColor = 'r';
+      xlim(h.uihandles.ax_matchstats2,[-0.05,1.05])
       xlabel(h.uihandles.ax_matchstats2,'score')
       ylabel(h.uihandles.ax_matchstats2,'# clusters')
+      
+      h.PUF_match_stats()
+      
       
       %% set active display
       h.c_disp.active = h.c_disp.c(1);
@@ -1874,9 +1909,9 @@ classdef ROI_matching < handle
         
         for s = 1:h.data.nSes
           obj.session(s).ROI_ID = [];
+          
           for i = 1:h.clusters(c).stats.occupancy(s)
             n = h.clusters(c).session(s).list(i);
-            
             if plot_3D
               %%% here comes 3D plotting
               A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
@@ -1890,7 +1925,7 @@ classdef ROI_matching < handle
             end
             idx = length(obj.session(s).ROI_ID)+1;
             obj.session(s).ROI_ID(idx) = n;
-            set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'HitTest','on');
+            set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,[c s n]},'HitTest','on');
             h.create_ROI_menu(obj,obj.session(s).ROI(idx),[c s n])
           end  
         end
@@ -1918,7 +1953,7 @@ classdef ROI_matching < handle
               else
                 obj.session(s).ROI(idx) = cluster_plot_blobs(obj.ax_ROI_display,full(footprints.session(s).ROI(n).A),[],h.parameter.ROI_thr,'--','r',0.75);
               end
-              set(obj.session(s).ROI(idx),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'HitTest','on');
+              set(obj.session(s).ROI(idx),'ButtonDownFcn',{@h.ButtonDown_pickROI,[c s n]},'HitTest','on');
               h.create_ROI_menu(obj,obj.session(s).ROI(idx),[c s n])
               obj.session(s).ROI_ID(idx) = n;
             end
@@ -2008,7 +2043,6 @@ classdef ROI_matching < handle
       
       idx = find(obj.session(s).ROI_ID==n);
       handle = obj.session(s).ROI(idx);
-      
       if ~ismember(n,h.clusters(c).session(s).list)
         if get(h.uihandles.radio_clusterdisplay_3D,'Value')
           handle.FaceAlpha = 0.4;
@@ -2027,8 +2061,20 @@ classdef ROI_matching < handle
         end
       end
     end
+    
+    
+    
+    function PUF_match_stats(h)
       
+      set(h.plots.histo_ct(1),'YData',hist(h.data.ct(~h.status.deleted & ~h.status.processed),linspace(1,h.data.nSes,h.data.nSes)))
+      set(h.plots.histo_ct(2),'YData',hist(h.data.ct(~h.status.deleted & h.status.processed),linspace(1,h.data.nSes,h.data.nSes)))
       
+      set(h.plots.histo_score(1),'YData',hist(h.data.score(~h.status.deleted & ~h.status.processed),linspace(0,1,21)))
+      set(h.plots.histo_score(2),'YData',hist(h.data.score(~h.status.deleted & h.status.processed),linspace(0,1,21)))
+    end
+    
+    
+    
     function PUF_cluster(h,obj,c)
       
       h.PUF_cluster_stats(obj,c);
@@ -2201,7 +2247,8 @@ classdef ROI_matching < handle
 
 %%% --------------------------------start: GUI interaction functions -----------------------------%%%
       
-    function ButtonDown_pickROI(h, hObject, eventdata, obj, ID)
+    function ButtonDown_pickROI(h, hObject, eventdata, ID)
+      
       
     % ID contains: (c,s,n)
       c = ID(1);
@@ -2215,11 +2262,11 @@ classdef ROI_matching < handle
       if ~strcmp(f.SelectionType, 'alt')
         
         if t < 0.3 && (~isempty(obj) || all(isnan(obj.picked.ROI)) || all([s n] == obj.picked.ROI))  %% doubleclick (not on clusterstats)
-          h.toggle_belong(hObject, eventdata, obj, ID);
           h.dblclick = tic-2; %% disable double click trigger for next click
+          h.toggle_belong(hObject, eventdata, obj, ID);
         else
-          h.toggle_picked_ROI(obj, hObject, ID);
           h.dblclick = tic;
+          h.toggle_picked_ROI(obj, hObject, ID);
         end
         
       end
@@ -2532,7 +2579,6 @@ classdef ROI_matching < handle
       n = ID(3);
       
       h.toggle_picked_ROI(obj,hObject,c)  % deselect
-      
       h.toggle_cluster_list(ID)
       
       %% plot updates 
@@ -2722,7 +2768,7 @@ classdef ROI_matching < handle
       for s = 1:h.data.nSes
         for i = 1:length(obj.session(s).ROI_ID)
           n = obj.session(s).ROI_ID(i);
-          set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,obj,[c s n]},'EdgeColor','k')
+          set(obj.session(s).ROI(i),'ButtonDownFcn',{@h.ButtonDown_pickROI,[c s n]},'EdgeColor','k')
         end
       end
       h.status.picked.markROIs = [];
@@ -2852,10 +2898,10 @@ classdef ROI_matching < handle
   
 %%% ------------------------------------ end: ROI menu functions ----------------------------%%%
       
-    function toggle_picked_ROI(h, obj, hObject, ID)
+    function toggle_picked_ROI(h,   obj, hObject, ID)
       
       c = ID(1);
-      
+        
       %% reset earlier picked ROI
       if ~all(isnan(obj.picked.ROI))
         idx = find(obj.session(obj.picked.ROI(1)).ROI_ID==obj.picked.ROI(2));
@@ -2866,6 +2912,7 @@ classdef ROI_matching < handle
         c = ID(1);
         s = ID(2);
         n = ID(3);
+        
         
         if all(obj.picked.ROI == [s n])
           obj.picked.ROI = [NaN NaN];
@@ -2926,13 +2973,6 @@ classdef ROI_matching < handle
       h.update_arrays(c)
     end
     
-    
-    
-    function PUF_match_stats(h)
-      c_arr = ~h.status.deleted;
-      set(h.plots.histo_ct,'Data',h.data.ct(c_arr))
-      set(h.plots.histo_score,'Data',h.data.score(c_arr))
-    end
     
     
     
@@ -3005,6 +3045,7 @@ classdef ROI_matching < handle
                 if isempty(footprints.session(s).ROI(n).A)
                   disp('removing')
                   [s n]
+                  h.data.session(s).ROI(n).cluster_ID
                   h.remove_ROI(s,n)
                 else
                   A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
@@ -3158,6 +3199,9 @@ classdef ROI_matching < handle
       
       if ~get(h.uihandles.query_keep_open(i),'Value')
         close(h.uihandles.queryfig(i))   %% add possibility to keep window open
+      else
+        set(h.uihandles.manipulate_accept(i),'enable','off','Callback',[])
+        set(h.uihandles.manipulate_refuse(i),'enable','off','Callback',[])
       end
       %% save footprint and Calcium trace to end of footprints & Ca files
       s = h.status.manipulate(i).pre(1).ID(1);
@@ -3183,7 +3227,6 @@ classdef ROI_matching < handle
         footprints = getappdata(0,'footprints');
         
         n = h.data.session(s).nROI + j;    %% append to end of data
-        h.data.session(s).nROI = n;
         
         %% update footprints structure
         footprints.data.session(s).nROI = n;
@@ -3251,7 +3294,19 @@ classdef ROI_matching < handle
       h.update_statusboxes()
       
       %% update plots: single ROIs display (replot cluster), and clustershape (replot shape)
-      h.choose_cluster(h.c_disp.active,h.data.session(s).ROI(n).cluster_ID(1))
+      c = h.data.session(s).ROI(n).cluster_ID(1);
+      obj_new = h.get_axes(c);
+      if isempty(obj_new)
+        obj_new = h.c_disp.active;
+      end
+      
+      for obj = h.c_disp.c
+        if eq(obj,obj_new)
+          h.choose_cluster(obj,c)
+        else
+          h.choose_cluster(obj,obj.picked.cluster)
+        end
+      end
       
       
     end
