@@ -124,8 +124,8 @@ classdef ROI_matching < handle
         
         set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
         
-        set(h.uihandles.table_ROI_manipulation,'ColumnName',{'' 'ROI ID' 'type' 'to shape of...'})
-        set(h.uihandles.table_ROI_manipulation,'ColumnWidth',{[30],[100],[50],[110]})
+        set(h.uihandles.table_ROI_manipulation,'ColumnName',{'' 'ID' 'ROI ID' 'type' 'to shape of...'})
+        set(h.uihandles.table_ROI_manipulation,'ColumnWidth',{[20],[30],[100],[50],[130]})
         set(h.uihandles.table_ROI_manipulation,'Data',cell(0,4),'Visible','off')
         set(h.uihandles.checkbox_table_display_processed,'Callback',@h.checkbox_table_display_processed_Callback)
         
@@ -292,13 +292,15 @@ classdef ROI_matching < handle
       
       %% setup of status structure
       h.status = struct('save',struct('footprints',false,'xdata',false),...
+                        'manipulation_now',struct('type',[],'bool',false,'s',[],'idx',[]),...
+                        'manipulate_ct',0,...
                         'picked',struct('markROIs',[],'list',[]),'mark','',...
                         'plotted',false(nCluster,1),...
                         'processed',false(nCluster,1),'active',true(nCluster,1),'deleted',false(nCluster,1),...
                         'multiROI',false(nCluster,1),'polyROI',false(nCluster,1),...
                         'unsure',false(nCluster,1),'manipulated',false(nCluster,1),...
                         'session',struct('manipulated',cell(nSes,1),'deleted',cell(nSes,1),...
-                                         'visible',cell(nSes,1),'merge_ct',cell(nSes,1),'split_ct',cell(nSes,1)));
+                                         'visible',cell(nSes,1)));
       
       for s = 1:nSes
         h.data.session(s).shift = footprints.data.session(s).shift;
@@ -310,15 +312,14 @@ classdef ROI_matching < handle
         end
         
         if bool_ld
-          h.status.session(s).manipulated = status.session(s).manipulated;
+          h.status.session(s).manipulated = 1*status.session(s).manipulated;
           h.status.session(s).deleted = status.session(s).deleted;
-          h.status.session(s).merge_ct = status.session(s).merge_ct;
-          h.status.session(s).split_ct = status.session(s).split_ct;
+          
+          h.status.session(s).manipulation = status.session(s).manipulation;
         else
-          h.status.session(s).manipulated = false(h.data.session(s).nROI,1);
+          h.status.session(s).manipulated = zeros(h.data.session(s).nROI,1);
           h.status.session(s).deleted = false(h.data.session(s).nROI,1);
-          h.status.session(s).merge_ct = zeros(h.data.session(s).nROI,1);
-          h.status.session(s).split_ct = zeros(h.data.session(s).nROI,1);
+          h.status.session(s).manipulation = struct('pre',{},'post',{},'prototype',{},'type',{},'processed',{},'undone',{});
         end
         h.status.session(s).visible = true;
       end
@@ -327,17 +328,15 @@ classdef ROI_matching < handle
         h.status.processed = status.processed;
         h.status.unsure = status.unsure;
         h.status.deleted = status.deleted;
-        h.status.manipulated = status.manipulated;
         
-        h.status.manipulate = status.manipulate;
-        
+        h.status.manipulation = status.manipulation;
+        h.status.manipulate_ct = status.manipulate_ct;
         h.t.offset = status.time;
       else
-        h.status.manipulate = struct('processed',{},'pre',{},'post',{},'type',{});
-        
+        h.status.manipulation = struct('ID',{});
+        h.status.manipulate_ct = 0;
         h.t.offset = 0;
       end
-      h.status.manipulate_ct = length(h.status.manipulate);
       
       %%% processing input from "clusters" structure (from clustering or loading)
       h.wbar.handle = waitbar(0,'Loading and processing clusters...');
@@ -924,9 +923,9 @@ classdef ROI_matching < handle
         new_val = ~h.status.processed(c);
       end
       
-      if (h.clusters(c).status.merge || h.clusters(c).status.split) && new_val
-        uiwait(msgbox('Cluster cannot be marked as complete, as long as there are manipulations pending!'))
-      elseif h.status.polyROI(c) && new_val
+%        if (h.clusters(c).status.manipulated==2) && new_val
+%          uiwait(msgbox('Cluster cannot be marked as complete, as long as there are manipulations pending!'))
+      if h.status.polyROI(c) && new_val
         uiwait(msgbox('There are multiassignments in this cluster. Please remove those bevore marking as complete'))
       else
         h.status.processed(c) = new_val;
@@ -1164,9 +1163,9 @@ classdef ROI_matching < handle
       status.processed = h.status.processed;
       status.unsure = h.status.unsure;
       status.deleted = h.status.deleted;
-      status.manipulated = h.status.manipulated;
       
-      status.manipulate = h.status.manipulate;
+      status.manipulation = h.status.manipulation;
+      status.manipulate_ct = h.status.manipulate_ct;
       
       status.time = h.t.now;
       
@@ -1192,185 +1191,213 @@ classdef ROI_matching < handle
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
       
-      switch h.status.mark
-        case 'merge_pre'
-          c = h.c_disp.active.picked.cluster;
+      s = h.status.manipulation_now.s;
+      idx = h.status.manipulation_now.idx;
           
-          idx = h.status.manipulate_ct+1;
-          h.status.manipulate(idx).pre = h.status.picked.markROIs;
+      if strcmp(h.status.manipulation_now.type,'merge_pre')          
+        
+        c = h.c_disp.active.picked.cluster;
+        
+        h.status.manipulate_ct = h.status.manipulate_ct + 1;
+        h.status.session(s).manipulation(idx).processed = false;
+        h.status.session(s).manipulation(idx).ID = h.status.manipulate_ct;
+        h.status.session(s).manipulation(idx).pre = h.status.picked.markROIs;
+        h.status.session(s).manipulation(idx).undone = false;
+        
+        h.status.manipulation(h.status.session(s).manipulation(idx).ID).idx = [s,idx];
+        
+        h.status.manipulation_now.type = 'merge';
+        
+        session_filter = 1:h.data.nSes;
+        session_filter(h.status.session(s).manipulation(idx).pre(1).ID(1)) = [];
+        
+        h.status.minmax_ROI = [0,1];
+        
+        h.enable_markROI(c,'g','Merging','as new area',session_filter);
+        set(h.uihandles.button_choose_ROIs_done,'enable','on')
+        
+      else
+        
+        footprints = getappdata(0,'footprints');
+        
+        %% build prototype footprints
+        switch h.status.manipulation_now.type
+          case 'split'
+            h.status.session(s).manipulation(idx).type = 'split';
+            n = h.status.session(s).manipulation(1).pre.ID(2);
+            for i = 1:length(h.status.picked.markROIs)
+              sm = h.status.picked.markROIs(i).ID(1);
+              m = h.status.picked.markROIs(i).ID(2);
+              h.status.session(s).manipulation(idx).prototype(i) = footprints.session(sm).ROI(m);
+            end
+          case 'merge'
+            h.status.session(s).manipulation(idx).type = 'merge';
+            if ~isempty(h.status.picked.markROIs)
+              sm = h.status.picked.markROIs(1).ID(1);
+              m = h.status.picked.markROIs(1).ID(2);
+              h.status.session(s).manipulation(idx).prototype = footprints.session(sm).ROI(m);
+            else
+              A_tmp = sparse(h.data.imSize(1),h.data.imSize(2));
+              for i = 1:length(h.status.session(s).manipulation(idx).pre)
+                sm = h.status.session(s).manipulation(idx).pre(i).ID(1);
+                m = h.status.session(s).manipulation(idx).pre(i).ID(2);
+                A_tmp = A_tmp + footprints.session(sm).ROI(m).A;
+              end
+              A_tmp_norm = A_tmp/sum(A_tmp(:));
+              h.status.session(s).manipulation(idx).prototype.A = A_tmp;
+              h.status.session(s).manipulation(idx).prototype.centroid = [sum((1:h.data.imSize(1))*A_tmp_norm),sum(A_tmp_norm*(1:h.data.imSize(2))')];
+              h.status.session(s).manipulation(idx).prototype.norm = norm(full(A_tmp));
+            end
+        end
+        
+        %%% check for validity!
+        if h.check_manipulate(h.status.session(s).manipulation(idx))
           
-          h.status.mark = 'merge_post';
-          
-          session_filter = 1:h.data.nSes;
-          session_filter(h.status.manipulate(idx).pre(1).ID(1)) = [];
-          
-          h.status.minmax_ROI = [0,1];
-          
-          h.enable_markROI(c,'g','Merging','as new area',session_filter);
-          set(h.uihandles.button_choose_ROIs_done,'enable','on')
-          
-        case 'merge_post'
-          
-          %% check overlap & connection in pre if no post given
-          idx = h.status.manipulate_ct+1;
-          h.status.manipulate(idx).post = h.status.picked.markROIs;
-          
-          h.status.manipulate(idx).type = 'merge';
-          h.status.manipulate(idx).processed = false;
-          
-          status = h.check_already_manipulate(idx);
-          
-          if h.check_manipulate(h.status.manipulate(idx)) && status
-            h.status.manipulate_ct = idx;
+          tic
+          for i = 1:length(h.status.session(s).manipulation(idx).prototype)
             
-            for i = 1:length(h.status.manipulate(idx).pre)
-              s = h.status.manipulate(idx).pre(i).ID(1);
-              n = h.status.manipulate(idx).pre(i).ID(2);
-              
-              h.status.session(s).merge_ct(n) = h.status.session(s).merge_ct(n) + 1;
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-                h.toggle_processed([],[],c,false)
+            n = h.data.session(s).nROI + 1;
+            
+            h.status.session(s).manipulation(idx).post(i).ID = [s n];
+            
+            h.data.session(s).nROI = n;
+            
+            footprints.data.session(s).nROI = n;
+            
+            footprints.session(s).ROI(n) = h.status.session(s).manipulation(idx).prototype(i);
+            footprints.session(s).centroids(n,:) = footprints.session(s).ROI(n).centroid;
+            setappdata(0,'footprints',footprints)
+            
+            h.add_xdata(s,n)
+            
+            h.status.session(s).manipulated(n) = 2;     %% 0 = nothing, 1 = manipulation processed, 2 = marked for manipulation
+            h.status.session(s).deleted(n) = false;
+            
+            h.data.session(s).ROI(n) = struct('cluster_ID',[]);
+            
+            %% add new ROI to all clusters, to which post neurons belonged
+            for k = 1:length(h.status.picked.markROIs)
+              sk = h.status.picked.markROIs(k).ID(1);
+              nk = h.status.picked.markROIs(k).ID(2);
+              for c = h.data.session(sk).ROI(nk).cluster_ID
+                h.toggle_cluster_list([c,s,n],true)
+                h.update_arrays(c)
               end
             end
-            for i = 1:length(h.status.manipulate(idx).post)
-              s = h.status.manipulate(idx).post(i).ID(1);
-              n = h.status.manipulate(idx).post(i).ID(2);
-              
-              h.status.session(s).merge_ct(n) = h.status.session(s).merge_ct(n) + 1;
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.toggle_processed([],[],c,false)
+            
+            %% add new ROI to all clusters, to which pre neurons belonged
+            for k = 1:length(h.status.session(s).manipulation(idx).pre)
+              sk = h.status.session(s).manipulation(idx).pre(k).ID(1);
+              nk = h.status.session(s).manipulation(idx).pre(k).ID(2);
+              for c = h.data.session(sk).ROI(nk).cluster_ID
+                h.toggle_cluster_list([c,s,n],true)
+                h.update_arrays(c)
               end
             end
             
-            h.update_table()
-            h.update_statusboxes()
-            
-            set(h.uihandles.button_save,'enable','on')
-          else
-            uiwait(msgbox('chosen candidates for merging do not overlap properly'))
           end
-          h.button_cancel_menu_Callback([],[],h.c_disp.active.picked.cluster)
           
-          set(h.uihandles.button_run_manipulation,'enable','on')
+          h.status.session(s).manipulation(idx).prototype = []; %% remove to save memory
           
-        case 'split'
+          h.button_cancel_menu_Callback([],[],h.c_disp.active.picked.cluster,false)
           
-          idx = h.status.manipulate_ct+1;
-          h.status.manipulate(idx).post = h.status.picked.markROIs;
-          
-          h.status.manipulate(idx).type = 'split';
-          h.status.manipulate(idx).processed = false;
-          
-          status = h.check_already_manipulate(idx);
-          
-          if h.check_manipulate(h.status.manipulate(idx)) && status
-            h.status.manipulate_ct = idx;
-            
-            for i = 1:length(h.status.manipulate(idx).pre)
-              s = h.status.manipulate(idx).pre(i).ID(1);
-              n = h.status.manipulate(idx).pre(i).ID(2);
-              
-              h.status.session(s).split_ct(n) = h.status.session(s).split_ct(n) + 1;
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-                h.toggle_processed([],[],c,false)
-              end
-            end
-            for i = 1:length(h.status.manipulate(idx).post)
-              s = h.status.manipulate(idx).post(i).ID(1);
-              n = h.status.manipulate(idx).post(i).ID(2);
-              
-              h.status.session(s).split_ct(n) = h.status.session(s).split_ct(n) + 1;
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-                h.toggle_processed([],[],c,false)
-              end
-            end
-            h.update_table()
-            
-            h.update_statusboxes()
-            h.button_cancel_menu_Callback([],[],h.c_disp.active.picked.cluster)
-            set(h.uihandles.button_save,'enable','on')
-          else
-            uiwait(msgbox('chosen candidates for splitting do not overlap properly'))
+          for i = 1:length(h.status.session(s).manipulation(idx).pre)
+            n = h.status.session(s).manipulation(idx).pre(i).ID(2);
+            h.remove_ROI(s,n)
           end
+          
+          h.status.save.footprints = true;
+          
+          h.update_statusboxes()
+          h.update_table()
+          
+          h.replot_clusters(h.c_disp.active.picked.cluster)
+          
+          set(h.uihandles.button_save,'enable','on')
           set(h.uihandles.button_run_manipulation,'enable','on')
+        else
+          uiwait(msgbox('chosen candidates for splitting do not overlap properly'))
+        end
           
       end
       
     end
     
     
-    function status = check_already_manipulate(h,idx)
+    function replot_clusters(h,c)
+      
+      obj_new = h.get_axes(c);
+      
+      if isempty(obj_new)
+        obj_new = h.c_disp.active;
+      end
+      
+      for obj = h.c_disp.c
+        if eq(obj,obj_new)
+          h.choose_cluster(obj,c)
+        else
+          h.choose_cluster(obj,obj.picked.cluster)
+        end
+      end
+    end
+    
+    
+    
+    function status = check_already_manipulate(h,s,n)
       
       status = true;
-      for j = 1:length(h.status.manipulate(idx).pre)
-        
-        s = h.status.manipulate(idx).pre(j).ID(1);
-        n = h.status.manipulate(idx).pre(j).ID(2);
-        
-        if h.status.session(s).merge_ct(n) || h.status.session(s).split_ct(n)
-          questdlg('ROI is already being manipulated. Do you want to go on?', ...
+      
+      if h.status.session(s).manipulated(n) && strcmp(h.status.manipulation_now.type,'merge_pre') 
+        if h.status.session(s).manipulated(n) == 2
+          answer = questdlg('ROI is already being manipulated. Do you want to go on?', ...
                   'ROI manipulation conflict', ...
                   'Yes','No','No');
-          switch answer
-            case 'No'
-              status = false;
-              return
-            case 'Yes'
-              status = true;
-          end
+        elseif h.status.session(s).manipulated(n) == 1
+          answer = questdlg('ROI has already been manipulated. Do you want to go on?', ...
+                  'ROI manipulation conflict', ...
+                  'Yes','No','No');
         end
-        
+        switch answer
+          case 'No'
+            status = false;
+            return
+          case 'Yes'
+            status = true;
+        end
       end
       
     end
       
     
     function status = check_manipulate(h,test)
+      %% checking, whether there is some overlap of footprints
       
       footprints = getappdata(0,'footprints');
       status = true;
       
-      switch h.status.mark
-        case 'merge_post'
-          if isempty(test.post)
-            %% check whether chosen ROIs have at least some overlap
-            s = test.pre(1).ID(1);
-            n = test.pre(1).ID(2);
-            
-            sm = test.pre(2).ID(1);
-            m = test.pre(2).ID(2);
-            
-            if ~nnz(footprints.session(sm).ROI(m).A(find(footprints.session(s).ROI(n).A)))
+      switch test.type
+        case 'merge'
+          %%% check, whether blobs are connected
+          ROI_tmp = bwlabel(full(test.prototype.A),8);
+          blobs = regionprops(ROI_tmp, 'PixelList');
+          if size(blobs, 1) > 1
+            status = false;
+            return
+          end
+          for i = 1:length(test.pre)
+            s = test.pre(i).ID(1);
+            n = test.pre(i).ID(2);
+            if  get_1w_corr(footprints.session(s).ROI(n),test.prototype) < 0.6
               status = false;
               return
-            end
-            
-          else
-            %% check, whether all pre ROIs have 1w-corr with post > 0.8 or so
-            sm = test.post.ID(1);
-            m = test.post.ID(2);
-            for idx = 1:length(test.pre)
-              s = test.pre(idx).ID(1);
-              n = test.pre(idx).ID(2);
-              
-              if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
-                status = false;
-                return
-              end
             end
           end
           
         case 'split'
-          sm = test.pre.ID(1);
-          m = test.pre.ID(2);
-          for idx = 1:length(test.post)
-            s = test.post(idx).ID(1);
-            n = test.post(idx).ID(2);
-            
-            if get_1w_corr(footprints.session(s).ROI(n),footprints.session(sm).ROI(m)) < 0.6
+          s = test.pre(1).ID(1);
+          n = test.pre(1).ID(2);
+          for i = 1:length(test.prototype)
+            if get_1w_corr(test.prototype(i),footprints.session(s).ROI(n)) < 0.6
               status = false;
               return
             end
@@ -1382,28 +1409,26 @@ classdef ROI_matching < handle
     
     function update_table(h)
       
-      table_data = cell(h.status.manipulate_ct,4);
-      if ~h.status.manipulate_ct
-        set(h.uihandles.table_ROI_manipulation,'Visible','off','Data',table_data)
-        set(h.uihandles.button_run_manipulation,'enable','off')
-      else
-        
-        idx = 0;
-        for i = 1:h.status.manipulate_ct
-          
-          if ~get(h.uihandles.checkbox_table_display_processed,'Value') && h.status.manipulate(i).processed
+      table_data = cell(0,4);
+      
+      i = 0;
+      for s = 1:h.data.nSes
+        for idx = 1:length(h.status.session(s).manipulation)
+          if h.status.session(s).manipulation(idx).undone || (~get(h.uihandles.checkbox_table_display_processed,'Value') && h.status.session(s).manipulation(idx).processed)
             continue
           end
           
-          if isempty(h.status.manipulate(i).type)
-            h.status.manipulate(i) = [];
-            h.status.manipulate_ct = h.status.manipulate_ct - 1;
+          if isempty(h.status.session(s).manipulation(idx).type)
+            disp('somehow is empty...')
+%              h.status.session(s).manipulation(idx) = [];
             continue
           end
-          idx = idx + 1;
-          table_data{idx,1} = h.status.manipulate(i).processed;
           
-          ROIs_pre = h.status.manipulate(i).pre;
+          i = i + 1;
+          table_data{i,1} = h.status.session(s).manipulation(idx).processed;
+          table_data{i,2} = h.status.session(s).manipulation(idx).ID;
+          
+          ROIs_pre = h.status.session(s).manipulation(idx).pre;
           
           str = '';
           for j = 1:length(ROIs_pre)
@@ -1412,34 +1437,32 @@ classdef ROI_matching < handle
               str = sprintf('%s, ',str);
             end
           end
-          table_data{idx,2} = str;
-          table_data{idx,3} = h.status.manipulate(i).type;
-
-          ROIs_post = h.status.manipulate(i).post;
+          table_data{i,3} = str;
+          table_data{i,4} = h.status.session(s).manipulation(idx).type;
           
-
           
-          switch h.status.manipulate(i).type
+          ROIs_post = h.status.session(s).manipulation(idx).post;
+          switch h.status.session(s).manipulation(idx).type
             case 'merge'
-              if isempty(h.status.manipulate(i).post)
-                table_data{idx,4} = 'compound';
-              else
-                table_data{idx,4} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
-              end
+              table_data{i,5} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
             case 'split'
-              if length(h.status.manipulate(i).post) == 1
-                table_data{idx,4} = sprintf('%d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1));
-              else
-                table_data{idx,4} = sprintf('%d(%d), %d(%d)',ROIs_post(1).ID(2),ROIs_post(1).ID(1),ROIs_post(2).ID(2),ROIs_post(2).ID(1));
+              str = '';
+              for j = 1:length(h.status.session(s).manipulation(idx).post)
+                str = sprintf('%s %d(%d),',str,ROIs_post(j).ID(2),ROIs_post(j).ID(1));
               end
+              table_data{i,5} = str(1:end-1);
             case 'discard'
-              table_data{idx,4} = '-';
+              table_data{i,5} = '-';
             case 'add'
               disp('nothing in here')
           end
-          
         end
-        
+      end
+      
+      if ~i
+        set(h.uihandles.table_ROI_manipulation,'Visible','off','Data',table_data)
+        set(h.uihandles.button_run_manipulation,'enable','off')
+      else
         set(h.uihandles.table_ROI_manipulation,'Visible','on','Data',table_data)
         set(h.uihandles.button_run_manipulation,'enable','on')
         h.create_table_menu()
@@ -1454,8 +1477,12 @@ classdef ROI_matching < handle
     
     function table_menu_CellSelectionCallback(h,obj,eventdata)
       
-      h.status.picked.list = eventdata.Indices;
-      
+      try
+        h.status.picked.list = eventdata.Indices(1);
+      catch
+        h.status.picked.list = [];
+      end
+    
 %        if ~isempty(h.status.picked.list)
 %          table_data = get(h.uihandles.table_ROI_manipulation,'Data');
 %          c = table_data{h.status.picked.list(1),2};
@@ -1474,85 +1501,81 @@ classdef ROI_matching < handle
       set(h.uihandles.table_ROI_manipulation,'UIContextMenu',cm)
       
       % Create child menu items for the uicontextmenu
-      m1 = uimenu(cm,'Label','Remove','Callback',@h.table_menu_remove);
+      m1 = uimenu(cm,'Label','Undo','Callback',@h.table_menu_undo);
       m2 = uimenu(cm,'Label','Display','Callback',@h.table_menu_display);
     end
     
     
-    function table_menu_remove(h,obj,event)
-      idx = h.status.picked.list(1);
-      if ~isempty(idx)
-        h.remove_manipulation(idx)
-      end
-    end
-    
-    function remove_manipulation(h,idx)
+    function table_menu_undo(h,obj,event)
       
-      if ~h.status.manipulate(idx).processed
-        switch h.status.manipulate(idx).type
-          case 'merge'
-            for j = 1:length(h.status.manipulate(idx).pre)
-              s = h.status.manipulate(idx).pre(j).ID(1);
-              n = h.status.manipulate(idx).pre(j).ID(2);
-              
-              h.status.session(s).merge_ct(n) = max(0,h.status.session(s).merge_ct(n) - 1);
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-              end
-            end
-            for j = 1:length(h.status.manipulate(idx).post)
-              s = h.status.manipulate(idx).post(j).ID(1);
-              n = h.status.manipulate(idx).post(j).ID(2);
-              
-              h.status.session(s).merge_ct(n) = max(0,h.status.session(s).merge_ct(n) - 1);
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-              end
-            end
-          case 'split'
-            for j = 1:length(h.status.manipulate(idx).pre)
-              s = h.status.manipulate(idx).pre(j).ID(1);
-              n = h.status.manipulate(idx).pre(j).ID(2);
-              
-              h.status.session(s).split_ct(n) = max(0,h.status.session(s).split_ct(n) - 1);
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-              end
-            end
-            for j = 1:length(h.status.manipulate(idx).post)
-              s = h.status.manipulate(idx).post(j).ID(1);
-              n = h.status.manipulate(idx).post(j).ID(2);
-              
-              h.status.session(s).split_ct(n) = max(0,h.status.session(s).split_ct(n) - 1);
-              for c = h.data.session(s).ROI(n).cluster_ID
-                h.clusters(c).DUF_cluster_status(h)
-              end
-            end
-          case 'discard'
-            s = h.status.manipulate(idx).pre.ID(1);
-            n = h.status.manipulate(idx).pre.ID(2);
-            h.status.session(s).deleted(n) = false;
-        end
-        h.update_statusboxes()
-        h.status.manipulate(idx) = [];
-        h.status.manipulate_ct = length(h.status.manipulate);
-        h.update_table()
+      if ~isempty(h.status.picked.list)
+        table_data = get(h.uihandles.table_ROI_manipulation,'Data');
+        ID = table_data{h.status.picked.list,2};
+        
+        h.undo_manipulation(ID)
       end
     end
     
-    function table_menu_display(h,obj,event)
-      %% if already processed, it should carry some information about which ROI was assigned anew, to switch to this one (because all pre ROIs were deleted, and post maybe changed)
-      idx = h.status.picked.list(1);
-      s = h.status.manipulate(idx).pre(1).ID(1);
-      n = h.status.manipulate(idx).pre(1).ID(2);
+    function undo_manipulation(h,ID)
+      
+      s = h.status.manipulation(ID).idx(1);
+      idx = h.status.manipulation(ID).idx(2);
+      
+      cluster_ID = [];
+      for j = 1:length(h.status.session(s).manipulation(idx).post)
+        n = h.status.session(s).manipulation(idx).post(j).ID(2);
+        
+        cluster_ID = [cluster_ID, h.data.session(s).ROI(n).cluster_ID];
+        h.remove_ROI(s,n)
+      end
+      
+      for j = 1:length(h.status.session(s).manipulation(idx).pre)
+        n = h.status.session(s).manipulation(idx).pre(j).ID(2);
+        
+        h.status.session(s).deleted(n) = false;
+        
+        for c = cluster_ID
+          h.toggle_cluster_list([c,s,n],true)
+          h.clusters(c).DUF_cluster_status(h)
+        end
+      end
+      
+      h.update_statusboxes()
+      h.status.manipulation(idx).idx = [];
+      h.status.session(s).manipulation(idx).undone = true;
+      h.update_table()
       
       if ~isempty(h.data.session(s).ROI(n).cluster_ID)
         c = h.data.session(s).ROI(n).cluster_ID(1);
-        h.choose_cluster(h.c_disp.active,c)
+      else
+        c = [];
+      end
+      
+      h.replot_clusters(c)
+      
+    end
+    
+    
+    function table_menu_display(h,obj,event)
+      
+      if ~isempty(h.status.picked.list)
+        table_data = get(h.uihandles.table_ROI_manipulation,'Data');
+        
+        ID = table_data{h.status.picked.list,2};
+        
+        s = h.status.manipulation(ID).idx(1);
+        idx = h.status.manipulation(ID).idx(2);
+        
+        n = h.status.session(s).manipulation(idx).post(1).ID(2);
+        
+        if ~isempty(h.data.session(s).ROI(n).cluster_ID)
+          c = h.data.session(s).ROI(n).cluster_ID(1);
+          h.choose_cluster(h.c_disp.active,c)
+        end
       end
     end
     
-    function button_cancel_menu_Callback(h, hObject, eventdata, c)
+    function button_cancel_menu_Callback(h, hObject, eventdata, c, interrupt)
       
       obj = h.get_axes(c);
       
@@ -1560,7 +1583,18 @@ classdef ROI_matching < handle
       set(h.uihandles.button_choose_ROIs_done,'Visible','off','enable','off')
       set(h.uihandles.button_cancel_menu,'Visible','off','enable','off')
       h.disable_markROI([],[],c)
-      h.status.mark = '';
+      
+      if interrupt && h.status.manipulation_now.bool
+        s = h.status.manipulation_now.s;
+        idx = h.status.manipulation_now.idx;
+        
+        h.status.manipulation(h.status.session(s).manipulation(idx).ID) = [];
+        h.status.manipulate_ct = h.status.manipulate_ct - 1;
+        
+        h.status.session(s).manipulation(idx) = [];
+      end
+        
+      h.status.manipulation_now.bool = false;
       
     end
 
@@ -2249,6 +2283,7 @@ classdef ROI_matching < handle
       
     function ButtonDown_pickROI(h, hObject, eventdata, ID)
       
+      set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
       
     % ID contains: (c,s,n)
       c = ID(1);
@@ -2298,6 +2333,7 @@ classdef ROI_matching < handle
       n = ID(3);
       
       obj = h.get_axes(c);
+      idx = h.status.manipulation_now.idx;
       
       if ~isempty(h.status.picked.markROIs)
         
@@ -2311,23 +2347,23 @@ classdef ROI_matching < handle
         if idx_bool     %% reset earlier picked ROI
           h.status.picked.markROIs(idx_list) = [];
           
-          idx = find(obj.session(s).ROI_ID==n);
-          set(obj.session(s).ROI(idx),'EdgeColor','k')
-        elseif length(h.status.picked.markROIs)>=h.status.minmax_ROI(2)
+          i = find(obj.session(s).ROI_ID==n);
+          set(obj.session(s).ROI(i),'EdgeColor','k')
+        elseif length(h.status.picked.markROIs)>=h.status.minmax_ROI(2) && h.check_already_manipulate(s,n)
           %% reset appearance of deleted ROI
           sm = h.status.picked.markROIs(h.status.minmax_ROI(2)).ID(1);
           m = h.status.picked.markROIs(h.status.minmax_ROI(2)).ID(2);
-          idx = find(obj.session(sm).ROI_ID==m);
-          set(obj.session(sm).ROI(idx),'EdgeColor','k')
+          i = find(obj.session(sm).ROI_ID==m);
+          set(obj.session(sm).ROI(i),'EdgeColor','k')
           
           h.status.picked.markROIs(h.status.minmax_ROI(2)).ID = [s n];
           set(hObject,'EdgeColor',col)
-        else
-          idx = length(h.status.picked.markROIs) + 1;
-          h.status.picked.markROIs(idx).ID = [s n];
+        elseif h.check_already_manipulate(s,n)
+          i = length(h.status.picked.markROIs) + 1;
+          h.status.picked.markROIs(i).ID = [s n];
           set(hObject,'EdgeColor',col)
         end
-      else
+      elseif h.check_already_manipulate(s,n)
         h.status.picked.markROIs(1).ID = [s n];
         set(hObject,'EdgeColor',col)
       end
@@ -2440,8 +2476,8 @@ classdef ROI_matching < handle
             h.remove_cluster(h.c_disp.active.picked.cluster)
           end
         case 'escape'
-          if ~strcmp(h.status.mark,'')
-            h.button_cancel_menu_Callback([],[],c)
+          if h.status.manipulation_now.bool
+            h.button_cancel_menu_Callback([],[],c,true)
           elseif ~any(isnan(h.c_disp.active.picked.ROI))
             s = h.c_disp.active.picked.ROI(1);
             n = h.c_disp.active.picked.ROI(2);
@@ -2450,7 +2486,7 @@ classdef ROI_matching < handle
             h.toggle_picked_ROI(h.c_disp.active,hObject,c)
           end
         case 'return'
-          if ~strcmp(h.status.mark,'') && strcmp(get(h.uihandles.button_choose_ROIs_done,'enable'),'on')
+          if h.status.manipulation_now.bool && strcmp(get(h.uihandles.button_choose_ROIs_done,'enable'),'on')
             h.button_choose_ROIs_done_Callback([],[])
           end
         case 'backspace'
@@ -2502,8 +2538,8 @@ classdef ROI_matching < handle
       obj.picked.ROI = [NaN NaN];
       set(h.uihandles.checkbox_ROI_unsure,'enable','off','Value',false)
       
-      if ~strcmp(h.status.mark,'')
-        h.button_cancel_menu_Callback([],[],c)
+      if h.status.manipulation_now.bool
+        h.button_cancel_menu_Callback([],[],c,true)
       end
       
       %% set overall plot and GUI controls
@@ -2619,14 +2655,20 @@ classdef ROI_matching < handle
       if ~isempty(c)
         set(h.uihandles.checkbox_processed,'Value',h.status.processed(c),'enable','on')
         set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c),'enable','on')
-        set(h.uihandles.checkbox_merge,'Value',h.clusters(c).status.merge)
-        set(h.uihandles.checkbox_split,'Value',h.clusters(c).status.split)
-        set(h.uihandles.checkbox_manipulated,'Value',h.status.manipulated(c))
+        
+        set(h.uihandles.checkbox_manipulation_pending,'Value',false)
+        set(h.uihandles.checkbox_manipulated,'Value',false)
+        
+        if h.clusters(c).status.manipulated == 1
+          set(h.uihandles.checkbox_manipulated,'Value',true)
+        elseif h.clusters(c).status.manipulated == 2
+          set(h.uihandles.checkbox_manipulation_pending,'Value',true)
+        end
+        
       else
         set(h.uihandles.checkbox_processed,'Value',false,'enable','off')
         set(h.uihandles.checkbox_unsure,'Value',false,'enable','off')
-        set(h.uihandles.checkbox_merge,'Value',false)
-        set(h.uihandles.checkbox_split,'Value',false)
+        set(h.uihandles.checkbox_manipulation_pending,'Value',false)
         set(h.uihandles.checkbox_manipulated,'Value',false)
       end
     end
@@ -2660,8 +2702,6 @@ classdef ROI_matching < handle
       %% 2 ROI (red, same session) -> 1 ROI (compound)
       %% 2 ROI (red, same session) -> 1 ROI (ROI from any session)
       
-      h.status.mark = 'merge_pre';
-      
       c = ID(1);
       
       if length(ID)>1
@@ -2671,6 +2711,13 @@ classdef ROI_matching < handle
         s = obj.picked.ROI(1);
         n = obj.picked.ROI(2);
       end
+      
+      idx = length(h.status.session(s).manipulation) + 1;
+      
+      h.status.manipulation_now.bool = true;
+      h.status.manipulation_now.type = 'merge_pre';
+      h.status.manipulation_now.s = s;
+      h.status.manipulation_now.idx = idx;
       
       h.toggle_picked_ROI(obj,hObject,c);
       
@@ -2692,10 +2739,6 @@ classdef ROI_matching < handle
     
       %% 1 ROI (red) -> 2 ROI (green, anywhere)
       %% 1 ROI (red) -> 1 ROI (anywhere, means pretty much: cutting off)
-%        h.status.manipulate = struct('processed',{},'pre',{},'post',{},'type',{});
-%        h.status.manipulate_ct = 0;
-      
-      h.status.mark = 'split';
       
       c = ID(1);
       if length(ID) > 1
@@ -2710,8 +2753,24 @@ classdef ROI_matching < handle
       
       h.status.minmax_ROI = [1,2];  % min/max number of ROIs to choose
       
-      idx = h.status.manipulate_ct+1;
-      h.status.manipulate(idx).pre = struct('ID',[s n]);
+      idx = length(h.status.session(s).manipulation) + 1;
+      
+      h.status.manipulation_now.bool = true;
+      h.status.manipulation_now.type = 'split';
+      h.status.manipulation_now.s = s;
+      h.status.manipulation_now.idx = idx;
+      
+      h.status.manipulate_ct = h.status.manipulate_ct + 1;
+      h.status.session(s).manipulation(idx).processed = false;
+      h.status.session(s).manipulation(idx).ID = h.status.manipulate_ct;
+      h.status.session(s).manipulation(idx).pre(1).ID = [s n];
+      h.status.session(s).manipulation(idx).undone = false;
+      
+      h.status.manipulation(h.status.session(s).manipulation(idx).ID).idx = [s,idx];
+      
+%        idx = h.status.manipulate_ct+1;
+      
+%        h.status.manipulate(idx).pre = struct('ID',[s n]);
       
       set(face_handle,'EdgeColor','r')
       
@@ -2803,24 +2862,26 @@ classdef ROI_matching < handle
       
     function remove_ROI(h,s,n)
       
-      h.status.mark = 'discard';
-      
       %% disengage from all clusters
       for c = h.data.session(s).ROI(n).cluster_ID
         h.toggle_cluster_list([c s n],false)
       end
       
+      idx = length(h.status.session(s).manipulation)+1;
       h.status.manipulate_ct = h.status.manipulate_ct + 1;
-      h.status.manipulate(h.status.manipulate_ct).processed = true;
-      h.status.manipulate(h.status.manipulate_ct).type = 'discard';
-      h.status.manipulate(h.status.manipulate_ct).pre(1).ID = [s n];
-      h.status.manipulate(h.status.manipulate_ct).post = [];
+      h.status.session(s).manipulation(idx).ID = h.status.manipulate_ct;
+      h.status.session(s).manipulation(idx).processed = true;
+      h.status.session(s).manipulation(idx).undone = false;
+      h.status.session(s).manipulation(idx).type = 'discard';
+      h.status.session(s).manipulation(idx).pre(1).ID = [s n];
+      h.status.session(s).manipulation(idx).post = [];
+      
+      h.status.manipulation(h.status.session(s).manipulation(idx).ID).idx = [s,idx];
       
       %% disable visibility (removing centroid)
       h.status.session(s).deleted(n) = true;
       
       h.update_table()
-      h.status.mark = '';
     end
     
     
@@ -2968,9 +3029,11 @@ classdef ROI_matching < handle
         idx = length(h.data.session(s).ROI(n).cluster_ID) + 1;
         h.data.session(s).ROI(n).cluster_ID(idx) = c;
       end
+      
       h.toggle_processed([],[],c,false)
       h.clusters(c).DUF(h,false)
       h.update_arrays(c)
+      
     end
     
     
@@ -2986,100 +3049,86 @@ classdef ROI_matching < handle
       footprints = getappdata(0,'footprints');
       margin = 5;
       
-      s_ld = 0;
       for s = 1:h.data.nSes
-        for i = 1:h.status.manipulate_ct
+        status = [h.status.session(s).manipulation.processed];
+        status = any(~status)
+        if length(h.status.session(s).manipulation) && status
           
-          if ~h.status.manipulate(i).processed && (s==h.status.manipulate(i).pre(1).ID(1));
+          pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
+          h5file = dir(pathcat(pathSession,'*.h5'));
+          pathData = pathcat(pathSession,h5file.name);
+          disp(sprintf('loading %s',pathData))
+          tic
+          Y = h5read(pathData,'/DATA');
+          disp('done')
+          toc
+          for idx = 1:length(h.status.session(s).manipulation)
             
-            disp(sprintf('-------------------- manipulation #%d ----------------------',i))
-            
-            pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
-            h5file = dir(pathcat(pathSession,'*.h5'));
-            pathData = pathcat(pathSession,h5file.name);
-            
-            if s ~= s_ld
-              Y = h5read(pathData,'/DATA');
-%                disp('file read')
-            end
-            
-            A_in = struct('n',[],'footprint',zeros(h.data.imSize(1),h.data.imSize(2),0),'ct',0,'centroid',zeros(0,2),'extents',[],'C',[]);
-            %% ROIs to be found (post)
-            if strcmp(h.status.manipulate(i).type,'merge') && ~length(h.status.manipulate(i).post)
-              A_in.ct = 1;
-              A_in.footprint(:,:,1) = zeros(h.data.imSize(1),h.data.imSize(2));
+            if ~h.status.session(s).manipulation(idx).processed && ~h.status.session(s).manipulation(idx).undone
               
-              for j = 1:length(h.status.manipulate(i).pre)
-                s_pre = h.status.manipulate(i).pre(j).ID(1);
-                n = h.status.manipulate(i).pre(j).ID(2);
+              disp(sprintf('-------------------- run manipulation #%d ----------------------',h.status.session(s).manipulation(idx).ID))
+              
+              A_in = struct('n',[],'footprint',zeros(h.data.imSize(1),h.data.imSize(2),0),'ct',0,'centroid',zeros(0,2),'extents',[],'C',[]);
+              
+              %% ROIs to be found (post)
+              for j = 1:length(h.status.session(s).manipulation(idx).post)
+                n = h.status.session(s).manipulation(idx).post(j).ID(2);
                 
-                A_in.footprint(:,:,1) = A_in.footprint(:,:,1) + full(footprints.session(s_pre).ROI(n).A);
-              end
-              A_in.status(A_in.ct) = true;
-            else
-              for j = 1:length(h.status.manipulate(i).post)
-                s_post = h.status.manipulate(i).post(j).ID(1);
-                n = h.status.manipulate(i).post(j).ID(2);
-                
-                %% post footprint
                 A_in.ct = A_in.ct + 1;
-                A_in.footprint(:,:,A_in.ct) = full(footprints.session(s_post).ROI(n).A);
+                A_in.footprint(:,:,A_in.ct) = full(footprints.session(s).ROI(n).A);
                 A_in.status(A_in.ct) = true;
               end
-           
-            end
-            
-            [y_idx,x_idx,z_idx] = ind2sub(size(A_in.footprint),find(A_in.footprint));
-            A_in.extents = [max(1,min(y_idx)-margin), min(h.data.imSize(1),max(y_idx)+margin); max(1,min(x_idx)-margin), min(h.data.imSize(2),max(x_idx)+margin)];
-            A_in.footprint = A_in.footprint(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2),:);
               
-            [d1,d2,~] = size(A_in.footprint);               % dimensions of dataset
-            d = d1*d2;                                      % total number of pixels
-            
-            %% find closeby pre-footprints  
-            IDs = cat(1,h.status.manipulate(i).pre.ID);
-            for n = 1:footprints.data.session(s).nROI
-              if ~ismember(n,IDs(:,2)) && ~h.status.session(s).deleted(n)
-%  %                  footprints.session(s).ROI(n).A
-%  %                  [s n]
-                if isempty(footprints.session(s).ROI(n).A)
-                  disp('removing')
-                  [s n]
-                  h.data.session(s).ROI(n).cluster_ID
-                  h.remove_ROI(s,n)
-                else
-                  A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
-                  if nnz(A_tmp) > 10;
-                    A_in.ct = A_in.ct + 1;
-                    A_in.footprint(:,:,A_in.ct) = full(A_tmp);
-                    A_in.status(A_in.ct) = false;
+              [y_idx,x_idx,z_idx] = ind2sub(size(A_in.footprint),find(A_in.footprint));
+              A_in.extents = [max(1,min(y_idx)-margin), min(h.data.imSize(1),max(y_idx)+margin); max(1,min(x_idx)-margin), min(h.data.imSize(2),max(x_idx)+margin)];
+              A_in.footprint = A_in.footprint(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2),:);
+                
+              [d1,d2,~] = size(A_in.footprint);               % dimensions of dataset
+              d = d1*d2;                                      % total number of pixels
+              
+              %% find closeby pre-footprints  
+              IDs = cat(1,h.status.session(s).manipulation(idx).post.ID);
+              for n = 1:footprints.data.session(s).nROI
+                if ~ismember(n,IDs(:,2)) && ~h.status.session(s).deleted(n)
+                  if isempty(footprints.session(s).ROI(n).A)
+                    disp('removing')
+                    [s n]
+                    h.data.session(s).ROI(n).cluster_ID
+                    h.remove_ROI(s,n)
+                  else
+                    A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
+                    if nnz(A_tmp) > 10;
+                      A_in.ct = A_in.ct + 1;
+                      A_in.footprint(:,:,A_in.ct) = full(A_tmp);
+                      A_in.status(A_in.ct) = false;
+                    end
                   end
                 end
               end
-            end
-            for j = 1:A_in.ct
-              A_norm = A_in.footprint(:,:,j)/sum(sum(A_in.footprint(:,:,j)));
-              A_in.centroid(j,:) = [sum((1:d1)*A_norm),sum(A_norm*(1:d2)')];
-            end
-            
-            Y_tmp = single(Y(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2),:));
-%              Y_tmp = single(read_file_crop(pathData,A_in.extents));
-            
-            A_in.C = zeros(A_in.ct,size(Y_tmp,3));
-            for j = 1:A_in.ct
-              A_tmp = A_in.footprint(:,:,j);
-              for t=1:size(Y_tmp,3)
-                A_in.C(j,t) = sum(sum(A_tmp.*Y_tmp(:,:,t)));
+              for j = 1:A_in.ct
+                A_norm = A_in.footprint(:,:,j)/sum(sum(A_in.footprint(:,:,j)));
+                A_in.centroid(j,:) = [sum((1:d1)*A_norm),sum(A_norm*(1:d2)')];
               end
+              
+%                tic
+              Y_tmp = single(Y(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2),:));
+%                Y_tmp = single(read_file_crop(pathData,A_in.extents));
+%                disp('h5 read')
+%                toc
+              A_in.C = zeros(A_in.ct,size(Y_tmp,3));
+              for j = 1:A_in.ct
+                A_tmp = A_in.footprint(:,:,j);
+                for t=1:size(Y_tmp,3)
+                  A_in.C(j,t) = sum(sum(A_tmp.*Y_tmp(:,:,t)));
+                end
+              end
+              ROI_out = manipulate_CNMF(h,h.status.session(s).manipulation(idx),h.path,Y_tmp,A_in);%single(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)));
+              
+              Cn = correlation_image(Y_tmp);%Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)); % image statistic (only for display purposes)
+              
+              h.query_manipulate(s,idx,Cn,A_in,ROI_out)
+              
             end
-            ROI_out = manipulate_CNMF(h,h.status.manipulate(i),h.path,Y_tmp,A_in);%single(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)));
-            
-            Cn = correlation_image(Y_tmp);%Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)); % image statistic (only for display purposes)
-            
-            h.query_manipulate(s,i,Cn,A_in,ROI_out)
-            
-%            else
-%              disp(sprintf('%d (%s) already processed',i,h.status.manipulate(i).type))
           end
         end
       end
@@ -3089,158 +3138,163 @@ classdef ROI_matching < handle
     end
     
     
-    function query_manipulate(h,s,i,Cn,A_in,ROI_out)
-
+    function query_manipulate(h,s,idx,Cn,A_in,ROI_out)
+      
+      %%% check, whether footprints have correlation > 0.6 or something and whether fitness of all new ROIs is alright
+      %%% if so, accept automatically (can enable showing anyway), if not, ask for permission
       footprints = getappdata(0,'footprints');
       
-      pathCa = pathcat(h.path.mouse,sprintf('Session%02d',s),'CaData.mat');
-      ld_Ca = load(pathCa);
-      
-      h.uihandles.queryfig(i) = figure('position',[100 100 1200 900]);
-      
-      h.uihandles.manipulate_accept(i) = uicontrol(h.uihandles.queryfig(i),'Style','pushbutton',...
-                                      'String','Accept',...
-                                      'Units','normalized','Position',[0.6 0.05 0.15 0.05],'Callback',{@h.accept_manipulation,i,ROI_out});
-              
-      h.uihandles.manipulate_refuse(i) = uicontrol(h.uihandles.queryfig(i),'Style','pushbutton',...
-                                      'String','Refuse',...
-                                      'Units','normalized','Position',[0.2 0.05 0.15 0.05],'Callback',{@h.refuse_manipulation,i});
-      
-      h.uihandles.query_keep_open(i) = uicontrol(h.uihandles.queryfig(i),'Style','checkbox',...
-                                      'Value',0,'String','keep window open',...
-                                      'Units','normalized','Position',[0.8 0.05 0.15 0.05]);
-      
-      time_arr = linspace(1/15,8989/15,8989);
-      ax_pre = subplot(2,2,1);
-      ax_post = subplot(2,2,2);
-      
-      ax_Ca_pre = subplot(6,1,4);
-      ax_Ca_post = subplot(6,1,5);
-      
-      ax_S = subplot(6,1,6);
-      
-      hold(ax_pre,'on')
-      hold(ax_Ca_pre,'on')
-      imagesc(ax_pre,Cn)
-      ax_pre.CLim = [0.5,1];
-      
-      %% plot contours and Ca of pre neurons
-      for j = 1:length(h.status.manipulate(i).pre)
-        n_pre = h.status.manipulate(i).pre(j).ID(2);
-        A_pre = full(footprints.session(s).ROI(n_pre).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)));
-        contour(ax_pre,A_pre,'b')
-        C_tmp = ld_Ca.C2(n_pre,:);
-        C_tmp = C_tmp/max(C_tmp);
-        plot(ax_Ca_pre,time_arr,(j-1)+C_tmp,'b')
+      status = true;
+      for i = 1:length(h.status.session(s).manipulation(idx).post)
+        n = h.status.session(s).manipulation(idx).post(i).ID(2);
+        ROI_out(i).corr_test = full(dot(ROI_out(i).A(:),footprints.session(s).ROI(n).A(:))/(ROI_out(i).norm*footprints.session(s).ROI(n).norm));
+        status = status && (ROI_out(i).corr_test>0.6 && ROI_out(i).fitness<-70);
+        ROI_out(i).corr_test
+        ROI_out(i).fitness
       end
       
-      %% plot contours and Ca of inputs to CNMF_manipulate
-      for j=1:A_in.ct
-        if A_in.status(j)
-          col = 'r';
-          
-          C_tmp = A_in.C(j,:);
-          baseline = prctile(C_tmp,5);
-          C_tmp = C_tmp - baseline;
+      if status || get(h.uihandles.checkbox_manipulation_display_results,'Value')
+      
+        pathCa = pathcat(h.path.mouse,sprintf('Session%02d',s),'CaData.mat');
+        ld_Ca = load(pathCa);
+        
+        ID = h.status.session(s).manipulation(idx).ID
+        
+        h.uihandles.queryfig(ID) = figure('position',[100 100 1200 900]);
+        
+        h.uihandles.manipulate_accept(ID) = uicontrol(h.uihandles.queryfig(ID),'Style','pushbutton',...
+                                        'String','Accept',...
+                                        'Units','normalized','Position',[0.6 0.05 0.15 0.05],'Callback',{@h.accept_manipulation,s,idx,ROI_out});
+                
+        h.uihandles.manipulate_refuse(ID) = uicontrol(h.uihandles.queryfig(ID),'Style','pushbutton',...
+                                        'String','Refuse',...
+                                        'Units','normalized','Position',[0.2 0.05 0.15 0.05],'Callback',{@h.refuse_manipulation,s,idx});
+        
+        h.uihandles.query_keep_open(ID) = uicontrol(h.uihandles.queryfig(ID),'Style','checkbox',...
+                                        'Value',0,'String','keep window open',...
+                                        'Units','normalized','Position',[0.8 0.05 0.15 0.05]);
+        
+        time_arr = linspace(1/15,8989/15,8989);
+        ax_pre = subplot(2,2,1);
+        ax_post = subplot(2,2,2);
+        
+        ax_Ca_pre = subplot(6,1,4);
+        ax_Ca_post = subplot(6,1,5);
+        
+        ax_S = subplot(6,1,6);
+        
+        hold(ax_pre,'on')
+        hold(ax_Ca_pre,'on')
+        imagesc(ax_pre,Cn)
+        ax_pre.CLim = [0.5,1];
+        
+        %% plot contours and Ca of pre neurons
+        for j = 1:length(h.status.session(s).manipulation(idx).pre)
+          n_pre = h.status.session(s).manipulation(idx).pre(j).ID(2);
+          A_pre = full(footprints.session(s).ROI(n_pre).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)));
+          contour(ax_pre,A_pre,'b')
+          C_tmp = ld_Ca.C2(n_pre,:);
           C_tmp = C_tmp/max(C_tmp);
-          plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'k:','LineWidth',0.8)
-        else
-          col = 'g';
+          plot(ax_Ca_pre,time_arr,(j-1)+C_tmp,'b')
         end
-        contour(ax_pre,A_in.footprint(:,:,j),col)
+        
+        %% plot contours and Ca of inputs to CNMF_manipulate
+        for j=1:A_in.ct
+          if A_in.status(j)
+            col = 'r';
+            C_tmp = A_in.C(j,:);
+            baseline = prctile(C_tmp,5);
+            C_tmp = C_tmp - baseline;
+            C_tmp = C_tmp/max(C_tmp);
+            plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'k:','LineWidth',0.8)
+          else
+            col = 'g';
+          end
+          contour(ax_pre,A_in.footprint(:,:,j),col)
+        end
+        hold(ax_pre,'off')
+        hold(ax_Ca_pre,'off')
+        
+        
+        %%% now, plotting all results
+        hold(ax_post,'on')
+        hold(ax_Ca_post,'on')
+        hold(ax_S,'on')
+        
+        imagesc(ax_post,Cn)
+        ax_post.CLim = [0.5,1];
+        
+        for j=1:length(ROI_out)
+          contour(ax_post,ROI_out(j).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)),'r')
+          
+          C_tmp = ROI_out(j).C;
+          C_tmp = C_tmp/max(C_tmp);
+          plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'r')
+          
+          S_tmp = ROI_out(j).S;
+          S_tmp = S_tmp/max(S_tmp);
+          plot(ax_S,time_arr,(j-1)+S_tmp,'k')
+          
+          prc = 30;
+          nsd = 4;
+          modeS = prctile(S_tmp(S_tmp>0),prc);                    %% get mode from overall activity
+          activity = floor(sqrt(S_tmp/(modeS*nsd)));         %% only activity from actual times
+          text(600,(j-1)+0.2,sprintf('spikes: %d',sum(activity)))
+          text(600,(j-1)+0.6,sprintf('fitness: %d',ROI_out(j).fitness))
+          text(600,(j-1)+1,sprintf('corr: %4.2g',ROI_out(j).corr_test))
+          
+          plot(ax_S,[0,600],(j-1)+[modeS*nsd modeS*nsd],'r--')
+        end
+        
+        hold(ax_post,'off')
+        hold(ax_Ca_post,'off')
+        hold(ax_S,'off')
+        
+        linkaxes([ax_Ca_pre,ax_Ca_post,ax_S],'x')
+        
+        
+      %%% add as text somewhere in the plot
+  %      for j = 1:size(manipulate.pre.ID,1)
+  %        corr_tmp = corrcoef(ROI_out(idx).C,ld_Ca.C2(manipulate.pre.ID(j,2),:));
+  %        corr_tmp = corr_tmp(1,2);
+  %        corr_tmp
+  %      end
+      else
+        h.accept_manipulation([],[],s,idx,ROI_out)
       end
-      hold(ax_pre,'off')
-      hold(ax_Ca_pre,'off')
-      
-      
-      %%% now, plotting all results
-      hold(ax_post,'on')
-      hold(ax_Ca_post,'on')
-      hold(ax_S,'on')
-      
-      imagesc(ax_post,Cn)
-      ax_post.CLim = [0.5,1];
-      
-      for j=1:length(ROI_out)
-        contour(ax_post,ROI_out(j).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)),'r')
-        
-        C_tmp = ROI_out(j).C;
-        C_tmp = C_tmp/max(C_tmp);
-        plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'r')
-        
-        S_tmp = ROI_out(j).S;
-        S_tmp = S_tmp/max(S_tmp);
-        plot(ax_S,time_arr,(j-1)+S_tmp,'k')
-        
-        prc = 30;
-        nsd = 4;
-        modeS = prctile(S_tmp(S_tmp>0),prc);                    %% get mode from overall activity
-        activity = floor(sqrt(S_tmp/(modeS*nsd)));         %% only activity from actual times
-        text(600,(j-1)+0.2,sprintf('spikes: %d',sum(activity)))
-        plot(ax_S,[0,600],(j-1)+[modeS*nsd modeS*nsd],'r--')
-      end
-      
-      hold(ax_post,'off')
-      hold(ax_Ca_post,'off')
-      hold(ax_S,'off')
-      
-      linkaxes([ax_Ca_pre,ax_Ca_post,ax_S],'x')
-      
-      
-    %%% add as text somewhere in the plot
-%      for j = 1:size(manipulate.pre.ID,1)
-%        corr_tmp = corrcoef(ROI_out(i).C,ld_Ca.C2(manipulate.pre.ID(j,2),:));
-%        corr_tmp = corr_tmp(1,2);
-%        corr_tmp
-%      end
     end
     
-    function accept_manipulation(h,hObject,eventdata,i,ROI_out)
+    function accept_manipulation(h,hObject,eventdata,s,idx,ROI_out)
       
-      if ~get(h.uihandles.query_keep_open(i),'Value')
-        close(h.uihandles.queryfig(i))   %% add possibility to keep window open
-      else
-        set(h.uihandles.manipulate_accept(i),'enable','off','Callback',[])
-        set(h.uihandles.manipulate_refuse(i),'enable','off','Callback',[])
+      ID = h.status.session(s).manipulation(idx).ID;
+      if ~isempty(hObject)
+        if ~get(h.uihandles.query_keep_open(ID),'Value')
+          close(h.uihandles.queryfig(ID))   %% add possibility to keep window open
+        else
+          set(h.uihandles.manipulate_accept(ID),'enable','off','Callback',[])
+          set(h.uihandles.manipulate_refuse(ID),'enable','off','Callback',[])
+        end
       end
+      
       %% save footprint and Calcium trace to end of footprints & Ca files
-      s = h.status.manipulate(i).pre(1).ID(1);
+      footprints = getappdata(0,'footprints');
+      
       pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
       
       CaPath = pathcat(pathSession,'CaData.mat');
       Ca_mat = matfile(CaPath,'Writable',true);
       
-      %%% remove 1 merge / split counter from each post neuron (pre neurons are deleted anyway)
-      for j = 1:length(h.status.manipulate(i).post)
-        sm = h.status.manipulate(i).post(j).ID(1);
-        m = h.status.manipulate(i).post(j).ID(2);
-        switch h.status.manipulate(i).type
-          case 'merge'
-            h.status.session(sm).merge_ct(m) = max(0,h.status.session(sm).merge_ct(m) - 1);
-          case 'split'
-            h.status.session(sm).split_ct(m) = max(0,h.status.session(sm).split_ct(m) - 1);
-        end
-      end
-      
-      for j = 1:length(ROI_out)
+      %%% set manipulation to processed
+      for j = 1:length(h.status.session(s).manipulation(idx).post)
+        n = h.status.session(s).manipulation(idx).post(j).ID(2);
         
-        footprints = getappdata(0,'footprints');
-        
-        n = h.data.session(s).nROI + j;    %% append to end of data
-        
-        %% update footprints structure
-        footprints.data.session(s).nROI = n;
         footprints.session(s).ROI(n).A = ROI_out(j).A;
         
         A_tmp_norm = ROI_out(j).A/sum(ROI_out(j).A(:));
         footprints.session(s).ROI(n).centroid = [sum((1:h.data.imSize(1))*A_tmp_norm),sum(A_tmp_norm*(1:h.data.imSize(2))')];
         footprints.session(s).ROI(n).norm = norm(full(ROI_out(j).A));
-        
-        footprints.session(s).centroids(n,:) = footprints.session(s).ROI(n).centroid;
         setappdata(0,'footprints',footprints)
         h.status.save.footprints = true;
-        
-        h.data.cluster_centroids(n,:) = footprints.session(s).ROI(n).centroid;
         
         h.add_xdata(s,n)
         
@@ -3248,79 +3302,41 @@ classdef ROI_matching < handle
         Ca_mat.C2(n,:) = ROI_out(j).C';
         Ca_mat.S2(n,:) = ROI_out(j).S';
         
-        %% update h-structure
-        h.status.session(s).merge_ct(n) = 0;
-        h.status.session(s).split_ct(n) = 0;
-        h.status.session(s).manipulated(n) = true;
-        h.status.session(s).deleted(n) = false;
-        
-        h.data.session(s).ROI(n) = struct('cluster_ID',[]);
-        
-        %% add new ROI to all clusters, to which post neurons belonged
-        for k = 1:length(h.status.manipulate(i).post)
-          sm = h.status.manipulate(i).post(k).ID(1);
-          m = h.status.manipulate(i).post(k).ID(2);
-          for c = h.data.session(sm).ROI(m).cluster_ID
-            h.toggle_cluster_list([c,s,n],true)
-          end
-        end
-        
-        %% add new ROI to all clusters, to which pre neurons belonged
-        for k = 1:length(h.status.manipulate(i).pre)
-          sm = h.status.manipulate(i).pre(k).ID(1);
-          m = h.status.manipulate(i).pre(k).ID(2);
-          for c = h.data.session(sm).ROI(m).cluster_ID
-            h.toggle_cluster_list([c,s,n],true)
-          end
-        end
-        
-        
+        h.status.session(s).manipulated(n) = 1;
         for c = h.data.session(s).ROI(n).cluster_ID
-          h.update_arrays(c)
+          h.clusters(c).DUF_cluster_status(h)
         end
       end
       
-      h.data.session(s).nROI = n;
-      
-      %% "delete" old (pre)-neurons
-      for j = 1:length(h.status.manipulate(i).pre)
-        sm = h.status.manipulate(i).pre(j).ID(1);
-        m = h.status.manipulate(i).pre(j).ID(2);
-        h.remove_ROI(sm,m);
-      end
-      
-      h.status.manipulate(i).processed = true;
+      h.status.session(s).manipulation(idx).processed = true;
       h.update_table()
       h.update_statusboxes()
+      h.DUF_process_info()
       
       %% update plots: single ROIs display (replot cluster), and clustershape (replot shape)
-      c = h.data.session(s).ROI(n).cluster_ID(1);
-      obj_new = h.get_axes(c);
-      if isempty(obj_new)
-        obj_new = h.c_disp.active;
+      n = h.status.session(s).manipulation(idx).post(1).ID(2);
+      
+      if ~isempty(h.data.session(s).ROI(n).cluster_ID)
+        c = h.data.session(s).ROI(n).cluster_ID(1);
+      else
+        c = [];
       end
       
-      for obj = h.c_disp.c
-        if eq(obj,obj_new)
-          h.choose_cluster(obj,c)
-        else
-          h.choose_cluster(obj,obj.picked.cluster)
-        end
-      end
-      
+      h.replot_clusters(c)
       
     end
     
     
-    function status = refuse_manipulation(h,hObject,eventdata,i)
-      status = false;
+    function refuse_manipulation(h,hObject,eventdata,s,idx)
+      
+      ID = h.status.session(s).manipulation(idx).ID;
       disp('manipulation refused')
-      if ~get(h.uihandles.query_keep_open(i),'Value')
-        close(h.uihandles.queryfig(i))
+      if ~get(h.uihandles.query_keep_open(ID),'Value')
+        close(h.uihandles.queryfig(ID))
       end
       
       %% remove from manipulation list
-      h.remove_manipulation(i)
+      h.undo_manipulation(ID)
     end
     
     
@@ -3335,7 +3351,7 @@ classdef ROI_matching < handle
         if sm == s
           dist_tmp = h.parameter.microns_per_pixel*sqrt((footprints.session(s).ROI(n).centroid(1) - footprints.session(sm).centroids(:,1)).^2 + (footprints.session(s).ROI(n).centroid(2) - footprints.session(sm).centroids(:,2)).^2);
           
-          xdata(s,sm).neighbours(n,1:n) = sparse(1*(dist_tmp < h.parameter.dist_max));
+          xdata(s,sm).neighbours(n,1:h.data.session(s).nROI) = sparse(1*(dist_tmp < h.parameter.dist_max));
           xdata(s,sm).neighbours(:,n) = xdata(s,sm).neighbours(n,:)';
           
           neighbours = xdata(s,sm).neighbours(n,:) > 0;
