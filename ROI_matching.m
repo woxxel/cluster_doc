@@ -3149,11 +3149,9 @@ classdef ROI_matching < handle
         n = h.status.session(s).manipulation(idx).post(i).ID(2);
         ROI_out(i).corr_test = full(dot(ROI_out(i).A(:),footprints.session(s).ROI(n).A(:))/(ROI_out(i).norm*footprints.session(s).ROI(n).norm));
         status = status && (ROI_out(i).corr_test>0.6 && ROI_out(i).fitness<-70);
-        ROI_out(i).corr_test
-        ROI_out(i).fitness
       end
       
-      if status || get(h.uihandles.checkbox_manipulation_display_results,'Value')
+      if ~status || get(h.uihandles.checkbox_manipulation_display_results,'Value')
       
         pathCa = pathcat(h.path.mouse,sprintf('Session%02d',s),'CaData.mat');
         ld_Ca = load(pathCa);
@@ -3239,9 +3237,9 @@ classdef ROI_matching < handle
           nsd = 4;
           modeS = prctile(S_tmp(S_tmp>0),prc);                    %% get mode from overall activity
           activity = floor(sqrt(S_tmp/(modeS*nsd)));         %% only activity from actual times
-          text(600,(j-1)+0.2,sprintf('spikes: %d',sum(activity)))
-          text(600,(j-1)+0.6,sprintf('fitness: %d',ROI_out(j).fitness))
-          text(600,(j-1)+1,sprintf('corr: %4.2g',ROI_out(j).corr_test))
+          text(600,(j-1)+0.1,sprintf('spikes: %d',sum(activity)))
+          text(600,(j-1)+0.35,sprintf('fitness: %d',ROI_out(j).fitness))
+          text(600,(j-1)+0.6,sprintf('corr: %4.2g',ROI_out(j).corr_test))
           
           plot(ax_S,[0,600],(j-1)+[modeS*nsd modeS*nsd],'r--')
         end
