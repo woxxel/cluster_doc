@@ -37,8 +37,20 @@ classdef ROI_matching < handle
         
         h.dblclick = tic;
         
+        pathPath = which('ROI_matching');
+        [pathPath,~,~] = fileparts(pathPath);
+        pathPath = pathcat(pathPath,'path.txt');
+        if exist(pathPath)
+          fileID = fopen(pathPath);
+          pathMouse = fgetl(fileID);
+          fclose(fileID)
+          pathMouse
+        else
+          pathMouse = '/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884';
+        end
+        
 %          set(h.uihandles.entry_data_path,'String','/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884')
-        set(h.uihandles.entry_data_path,'String','/media/wollex/AS2/Masaaki/884')
+        set(h.uihandles.entry_data_path,'String',pathMouse)
         
         h.set_paths()
         
@@ -222,6 +234,13 @@ classdef ROI_matching < handle
       h.path.xdata = pathcat(h.path.mouse,'xdata.mat');
 %        h.path.clusters = pathcat(h.path.mouse,'clusters.mat');
       h.path.results = pathcat(h.path.mouse,'matching_results.mat');
+      
+      %% save current path to file
+      pathPath = which('ROI_matching');
+      [pathPath,~,~] = fileparts(pathPath);
+      fileID = fopen(pathcat(pathPath,'path.txt'),'w');
+      fprintf(fileID,'%s\n',h.path.mouse);
+      fclose(fileID);
     end
     
     % --- Outputs from this function are returned to the command line.
