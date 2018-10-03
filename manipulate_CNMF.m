@@ -127,7 +127,8 @@ function [ROI_out] = manipulate_CNMF(h,manipulate,path,Y,A_in)
     
     ROI_out(i).fitness = compute_event_exceptionality(C_out(i,:)+YrA(i,:),options.N_samples_exc,options.robust_std);
     
-    [ROI_out(i).C, ROI_out(i).S] = deconvolveCa(C_out(i,:));
+    ROI_out(i).C = C_out(i,:);
+    [ROI_out(i).C_dec, ROI_out(i).S] = deconvolveCa(C_out(i,:));
   end
   
 %    query_manipulate(path,s,Cn,manipulate,A_in,ROI_out)

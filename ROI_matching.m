@@ -1947,9 +1947,10 @@ classdef ROI_matching < handle
     function plot_cluster(h,obj,c)
       
       %% resetting everything in the plot and on ROI-stats
-      cla(obj.ax_ROI_display)
-      cla(obj.ax_ROI_display_stats)
-      cla(obj.ax_ROI_clusterstats)
+      [az,el] = view(obj.ax_ROI_display);
+      cla(obj.ax_ROI_display,'reset')
+      view(obj.ax_ROI_display,[az,el])
+      cla(obj.ax_ROI_display_stats,'reset')
       
       %% resetting textbox
       h.display_ROI_info(obj,[]);
@@ -2037,7 +2038,6 @@ classdef ROI_matching < handle
         
         %% overall plot settings
         if plot_3D
-%            view(obj.ax_ROI_display,[15,30])
           set(obj.ax_ROI_display,'YDir','reverse')
           set(obj.ax_ROI_display,'ZDir','reverse')
           zlim(obj.ax_ROI_display,[0,h.data.nSes+1])
@@ -3088,7 +3088,7 @@ classdef ROI_matching < handle
       
       for s = 1:h.data.nSes
         status = [h.status.session(s).manipulation.processed];
-        status = any(~status)
+        status = any(~status);
         if length(h.status.session(s).manipulation) && status
           
           pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
@@ -3262,7 +3262,7 @@ classdef ROI_matching < handle
         for j=1:length(ROI_out)
           contour(ax_post,ROI_out(j).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)),'r')
           
-          C_tmp = ROI_out(j).C;
+          C_tmp = ROI_out(j).C_dec;
           C_tmp = C_tmp/max(C_tmp);
           plot(ax_Ca_post,time_arr,(j-1)+C_tmp,'r')
           
@@ -3334,8 +3334,8 @@ classdef ROI_matching < handle
         h.add_xdata(s,n)
         
         %% update CaTraces file
-        Ca_mat.C2(n,:) = ROI_out(j).C';
-        Ca_mat.S2(n,:) = ROI_out(j).S';
+        Ca_mat.C2(n,:) = ROI_out(j).C;
+%          Ca_mat.S2(n,:) = ROI_out(j).S';
         
         h.status.session(s).manipulated(n) = 1;
         for c = h.data.session(s).ROI(n).cluster_ID
