@@ -1134,7 +1134,7 @@ classdef ROI_matching < handle
       
       h.t.now = toc(h.t.start)+h.t.offset;
       
-%        h.set_paths('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/save/884')
+      h.set_paths()%'/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/save/884')
       
       if h.status.save.footprints
         footprints = getappdata(0,'footprints');
@@ -2299,7 +2299,9 @@ classdef ROI_matching < handle
       
     function ButtonDown_pickROI(h, hObject, eventdata, ID)
       
-      set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
+      set(h.uihandles.button_save,'enable','on')
+      set(h.uihandles.button_save,'Callback',@h.button_save_Callback)
+%        set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
       
     % ID contains: (c,s,n)
       c = ID(1);
