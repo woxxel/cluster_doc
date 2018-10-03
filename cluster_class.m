@@ -148,9 +148,6 @@ classdef cluster_class < handle
           polyROI = length(h.data.session(s).ROI(n).cluster_ID);
           this.stats.polyROI(s) = max(this.stats.polyROI(s),polyROI);       %% if more than 1 neuron in session
           
-%            [s n]
-%            h.status.session(s).manipulated(n)
-          
           this.status.manipulated = max(this.status.manipulated,h.status.session(s).manipulated(n));
           
         end

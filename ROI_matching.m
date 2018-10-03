@@ -104,6 +104,7 @@ classdef ROI_matching < handle
         set(h.uihandles.button_toggle_active_processed,'Callback',@h.button_toggle_active_processed_Callback)
         
         set(h.uihandles.button_data_path,'Callback',@h.button_data_path_Callback)
+        set(h.uihandles.entry_data_path,'Callback',@h.entry_data_path_Callback)
         
         set(h.uihandles.entry_ROI_adjacency,'Callback',@h.entry_ROI_adjacency_Callback)
         
@@ -210,8 +211,13 @@ classdef ROI_matching < handle
     
     
     
-    function set_paths(h)
-      h.path.mouse = get(h.uihandles.entry_data_path,'String');
+    function set_paths(h,pathData)
+      if nargin < 2
+        h.path.mouse = get(h.uihandles.entry_data_path,'String');
+      else
+        h.path.mouse = pathData;
+      end
+      
       h.path.footprints = pathcat(h.path.mouse,'footprints.mat');
       h.path.xdata = pathcat(h.path.mouse,'xdata.mat');
 %        h.path.clusters = pathcat(h.path.mouse,'clusters.mat');
@@ -1093,7 +1099,7 @@ classdef ROI_matching < handle
     end
 
         
-    function entry_data_path_Callback(hObject, eventdata, h)
+    function entry_data_path_Callback(h, hObject, eventdata)
     % hObject    handle to entry_data_path (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
@@ -1128,6 +1134,8 @@ classdef ROI_matching < handle
       
       h.t.now = toc(h.t.start)+h.t.offset;
       
+%        h.set_paths('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/save/884')
+      
       if h.status.save.footprints
         footprints = getappdata(0,'footprints');
         save(h.path.footprints,'footprints','-v7.3')
@@ -1141,12 +1149,16 @@ classdef ROI_matching < handle
       
       clusters_sv = struct('ID',cell(h.data.nCluster,1),'nSes',cell(h.data.nCluster,1),...
                            'session',struct('list',[],'ROI',struct('unsure',false)),...
+                           'stats',struct('ct',[],'score',[]),...
                            'status',struct);%('merge',false,'split',false,...
 %                                             'processed',false,'manipulated',false,'deleted',false,'unsure',false));
       
       for c=1:h.data.nCluster
         clusters_sv(c).ID = h.clusters(c).ID;
         clusters_sv(c).nSes = h.clusters(c).nSes;
+        
+%          clusters_sv(c).stats.ct = h.clusters(c).stats.ct;
+%          clusters_sv(c).stats.score = h.clusters(c).stats.score;
         
         for s = 1:h.data.nSes
           clusters_sv(c).session(s).list = h.clusters(c).session(s).list;
@@ -1167,9 +1179,13 @@ classdef ROI_matching < handle
       status.manipulation = h.status.manipulation;
       status.manipulate_ct = h.status.manipulate_ct;
       
+      data = h.data;
+      data.listener = [];
+      
+      
       status.time = h.t.now;
       
-      save(h.path.results,'clusters_sv','status','-v7.3')
+      save(h.path.results,'clusters_sv','status','data','-v7.3')
       uiwait(msgbox(sprintf('data saved @ %s',h.path.results)))
       
     end
@@ -1818,7 +1834,7 @@ classdef ROI_matching < handle
       
     function init_plot(h)
       %%% initial plotting of all clusters
-      load('/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884/Session01/reduced_MF1_LK1.mat','max_im')
+      load(pathcat(h.path.mouse,'Session01/reduced_MF1_LK1.mat'),'max_im')
       imagesc(h.uihandles.ax_cluster_overview,max_im,'Hittest','off')
       colormap(h.uihandles.ax_cluster_overview,'gray')
       
