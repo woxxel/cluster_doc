@@ -43,8 +43,7 @@ classdef ROI_matching < handle
         if exist(pathPath)
           fileID = fopen(pathPath);
           pathMouse = fgetl(fileID);
-          fclose(fileID)
-          pathMouse
+          fclose(fileID);
         else
           pathMouse = '/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884';
         end
@@ -57,17 +56,23 @@ classdef ROI_matching < handle
         set(h.uihandles.button_save,'enable','off')
         
         %% construct GUI for single-cluster display
-        pos_ax = {[0.03, 0.1, 0.25, 0.3],...
-                  [0.3, 0.1, 0.05, 0.3],...
-                  [0.03, 0.5, 0.25, 0.1]};
+        pos_ax = {[0.03, 0.12, 0.25, 0.3],...
+                  [0.3, 0.12, 0.07, 0.3],...
+                  [0.03, 0.52, 0.25, 0.1],...
+                  [0.03, 0.12, 0.4, 0.6],...
+                  [0.45, 0.12, 0.07, 0.6],...
+                  [0.03, 0.77, 0.4, 0.1]};
         pos_txt = {[0.03 0.4 0.05 0.035],...
                   [0.03 0.36 0.06 0.035]};
         h.c_disp.c(1) = build_GUI_cluster_display(h,pos_ax,pos_txt);
         
         
-        pos_ax = {[0.72, 0.1, 0.25, 0.3],...
-                  [0.65, 0.1, 0.05, 0.3],...
-                  [0.72, 0.5, 0.25, 0.1]};
+        pos_ax = {[0.72, 0.12, 0.25, 0.3],...
+                  [0.63, 0.12, 0.07, 0.3],...
+                  [0.72, 0.52, 0.25, 0.1],...
+                  [0.57, 0.12, 0.4, 0.6],...
+                  [0.48, 0.12, 0.07, 0.6],...
+                  [0.57, 0.77, 0.4, 0.1]};
         pos_txt = {[0.92 0.4 0.05 0.035],...
                   [0.91 0.36 0.06 0.035]};
         h.c_disp.c(2) = build_GUI_cluster_display(h,pos_ax,pos_txt);
@@ -101,6 +106,9 @@ classdef ROI_matching < handle
           set(obj.slider_cluster_ID,'Callback',{@h.slider_cluster_ID_Callback,obj})
           set(obj.entry_cluster_ID,'Callback',{@h.entry_cluster_ID_Callback,obj})
           set(obj.button_refresh,'Callback',{@h.button_refresh_Callback,obj})
+          
+          set(obj.checkbox_processed,'Callback',@h.toggle_processed)
+          set(obj.checkbox_unsure,'Callback',@h.checkbox_unsure_Callback)
         
           set(obj.radio_active,'Callback',{@h.radio_active_Callback})
         end
@@ -123,8 +131,7 @@ classdef ROI_matching < handle
         set(h.uihandles.entry_display_session,'Callback',@h.entry_display_session_Callback)
         
         set(h.uihandles.checkbox_ROI_unsure,'Callback',@h.checkbox_ROI_unsure_Callback)
-        set(h.uihandles.checkbox_processed,'Callback',@h.toggle_processed)
-        set(h.uihandles.checkbox_unsure,'Callback',@h.checkbox_unsure_Callback)
+        
         
         set(h.uihandles.checkbox_show_all_sessions,'Callback',@h.checkbox_show_all_sessions_Callback)
         set(h.uihandles.button_prev_session,'Callback',@h.button_prev_session_Callback)
@@ -150,6 +157,8 @@ classdef ROI_matching < handle
         set(h.uihandles.button_multi_remove_IDs,'Callback',@h.button_multi_remove_IDs_Callback)
         
         set(h.uihandles.button_toggle_time,'Callback',@h.button_toggle_time_Callback)
+        
+        set(h.uihandles.checkbox_enlarge,'Callback',@h.checkbox_enlarge_Callback)
         
       end
       
@@ -218,6 +227,7 @@ classdef ROI_matching < handle
           h.t.start = tic;
           start(h.t.timer)
       end
+      pause(0.01)
 %        
     end
     
@@ -319,6 +329,7 @@ classdef ROI_matching < handle
       h.status = struct('save',struct('footprints',false,'xdata',false),...
                         'manipulation_now',struct('type',[],'bool',false,'s',[],'idx',[]),...
                         'manipulate_ct',0,...
+                        'current_window',NaN,...
                         'picked',struct('markROIs',[],'list',[]),'mark','',...
                         'plotted',false(nCluster,1),...
                         'processed',false(nCluster,1),'active',true(nCluster,1),'deleted',false(nCluster,1),...
@@ -912,7 +923,6 @@ classdef ROI_matching < handle
         
         h.wbar.handle = waitbar(0,'Plotting clusters...');
         h.wbar.status = true;
-        h.plot_cluster_shape(c_plot,false)
         
         for c = c_not_plot
           if h.status.plotted(c)
@@ -920,8 +930,11 @@ classdef ROI_matching < handle
             h.status.plotted(c) = false;
           end
         end
+        
+        h.plot_cluster_shape(c_plot,false)
+        
         close(h.wbar.handle)
-        h.wbar.status = false
+        h.wbar.status = false;
         
       end
       
@@ -958,7 +971,7 @@ classdef ROI_matching < handle
       end
       
       if c == h.c_disp.active.picked.cluster
-        set(h.uihandles.checkbox_processed,'Value',h.status.processed(c))
+        set(h.c_disp.active.checkbox_processed,'Value',h.status.processed(c))
       end
       if h.status.plotted(c)
         set(h.plots.cluster_handles(c),'LineStyle','-','LineWidth',h.clusters(c).plot.thickness)
@@ -980,10 +993,11 @@ classdef ROI_matching < handle
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
       
-      c = h.c_disp.active.picked.cluster;
+      obj = h.c_disp.active;
+      c = obj.picked.cluster;
       
       h.status.unsure(c) = ~h.status.unsure(c);
-      set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c))
+      set(obj.checkbox_unsure,'Value',h.status.unsure(c))
       
       h.DUF_process_info()
       set(h.uihandles.button_save,'enable','on')
@@ -1150,6 +1164,7 @@ classdef ROI_matching < handle
     % handles    structure with handles and user data (see GUIDATA)
       
       set(hObject,'enable','off')
+      h.button_toggle_time_Callback([],[])
       
       h.t.now = toc(h.t.start)+h.t.offset;
       
@@ -1206,7 +1221,7 @@ classdef ROI_matching < handle
       
       save(h.path.results,'clusters_sv','status','data','-v7.3')
       uiwait(msgbox(sprintf('data saved @ %s',h.path.results)))
-      
+      h.button_toggle_time_Callback([],[])
     end
       
       
@@ -1747,7 +1762,6 @@ classdef ROI_matching < handle
         end
         
         if h.status.plotted(c_other)
-          delete(h.plots.cluster_handles(c_other))
           h.status.plotted(c_other) = false;
           if h.data.ct(c_other)
             h.plot_cluster_shape(c_other,true)
@@ -1936,6 +1950,9 @@ classdef ROI_matching < handle
             cluster_line = '-';
             cluster_thickness = h.clusters(c).plot.thickness;
           end
+          if h.status.plotted(c)
+            delete(h.plots.cluster_handles(c))
+          end
           h.plots.cluster_handles(c) = cluster_plot_blobs(h.uihandles.ax_cluster_overview,full(h.clusters(c).A),[],h.parameter.ROI_thr,cluster_line,h.clusters(c).plot.color,cluster_thickness);
           h.status.plotted(c) = true;
         end
@@ -1947,19 +1964,35 @@ classdef ROI_matching < handle
     function plot_cluster(h,obj,c)
       
       %% resetting everything in the plot and on ROI-stats
-      [az,el] = view(obj.ax_ROI_display);
-      cla(obj.ax_ROI_display,'reset')
-      view(obj.ax_ROI_display,[az,el])
-      cla(obj.ax_ROI_display_stats,'reset')
       
       %% resetting textbox
       h.display_ROI_info(obj,[]);
       h.display_ROIstat_info(obj,[],[]);
       
+      %% remove all plotted clusters before resetting
+      if isfield(obj,'session')
+        for s = 1:length(obj.session)
+          if isfield(obj.session(s),'ROI')
+            for idx = 1:length(obj.session(s).ROI)
+              disp('deleting stuff')
+              delete(obj.session(s).ROI(idx))
+              delete(obj.session(s).ROI_stat(idx))
+            end
+          end
+        end
+      end
+      
+      [az,el] = view(obj.ax_ROI_display);
+      cla(obj.ax_ROI_display,'reset')
+      view(obj.ax_ROI_display,[az,el])
+      
+      cla(obj.ax_ROI_display_stats,'reset')
+      
       obj.session = [];
+      
       if ~isempty(c)
         dist_thr = str2double(get(h.uihandles.entry_ROI_adjacency,'String'));
-        margin = dist_thr + 10;
+        margin = dist_thr + 5;
         
         %% getting data
         footprints = getappdata(0,'footprints');
@@ -2095,6 +2128,8 @@ classdef ROI_matching < handle
         
         h.PUF_cluster(obj,c);
         h.PUF_cluster_textbox(obj,c)
+        
+        h.checkbox_enlarge_Callback([],[])
         
         set(obj.slider_cluster_ID,'enable','on')
       else
@@ -2318,7 +2353,7 @@ classdef ROI_matching < handle
       
     function ButtonDown_pickROI(h, hObject, eventdata, ID)
       
-      set(h.uihandles.button_save,'enable','on')
+%        set(h.uihandles.button_save,'enable','on')
       set(h.uihandles.button_save,'Callback',@h.button_save_Callback)
 %        set(h.uihandles.button_choose_ROIs_done,'Callback',@h.button_choose_ROIs_done_Callback)
       
@@ -2343,8 +2378,88 @@ classdef ROI_matching < handle
         
       end
     end
+    
+    
+    
+    function enlarge_clusterdisp(h,hObject,eventdata)
       
+      pt = hgconvertunits(gcf, [get(gcf, 'CurrentPoint') 1 1], ...
+                        get(gcf, 'Units'), 'Normalized', gcf);
       
+      for i = 1:2
+        pos{i} = get(h.c_disp.c(i).ax_ROI_display,'Position');
+      end
+      
+      for i = 1:2
+        obj = h.c_disp.c(i);
+        if ~isnan(obj.picked.cluster)
+          
+          if pt(1)>pos{i}(1) && pt(1)<pos{i}(1)+pos{i}(3) && pt(2)>pos{i}(2) && pt(2)<pos{i}(2)+pos{i}(4)
+            if ~(h.status.current_window == i)
+              h.radio_active_Callback(obj.radio_active,[])
+              
+              if i==1
+                set(h.uihandles.panel_data,'Visible','off')
+                set(h.uihandles.panel_overview,'Visible','off')
+                set(h.uihandles.panel_manipulation,'Visible','on')
+                set(h.uihandles.buttongroup_clusterstats,'Visible','on')
+              else
+                set(h.uihandles.panel_data,'Visible','on')
+                set(h.uihandles.panel_overview,'Visible','on')
+                set(h.uihandles.panel_manipulation,'Visible','off')
+                set(h.uihandles.buttongroup_clusterstats,'Visible','off')
+              end
+              set(h.uihandles.panel_single_cluster,'Visible','off')
+              set(h.uihandles.panel_single_ROI,'Visible','off')
+              set(obj.radio_active ,'Visible', 'off')
+              
+              set(h.c_disp.c(3-i).radio_active ,'Visible', 'on')
+              set(h.c_disp.c(3-i).ax_ROI_display,'Position',h.c_disp.c(3-i).ax_sizes{1})
+              set(h.c_disp.c(3-i).ax_ROI_display_stats,'Position',h.c_disp.c(3-i).ax_sizes{2})
+              set(h.c_disp.c(3-i).ax_ROI_clusterstats,'Position',h.c_disp.c(3-i).ax_sizes{3})
+              
+              set(obj.ax_ROI_display,'Position',obj.ax_sizes{4})
+              set(obj.ax_ROI_display_stats,'Position',obj.ax_sizes{5})
+              set(obj.ax_ROI_clusterstats,'Position',obj.ax_sizes{6})
+              
+              h.status.current_window = i;
+            end
+            
+          elseif ~isnan(h.status.current_window) && ~(pt(1)>pos{1}(1) && pt(1)<pos{1}(1)+pos{1}(3) && pt(2)>pos{1}(2) && pt(2)<pos{1}(2)+pos{1}(4)) && ~(pt(1)>pos{2}(1) && pt(1)<pos{2}(1)+pos{2}(3) && pt(2)>pos{2}(2) && pt(2)<pos{2}(2)+pos{2}(4))
+            
+            set(h.uihandles.panel_manipulation,'Visible','on')
+            set(h.uihandles.buttongroup_clusterstats,'Visible','on')
+            
+            set(h.uihandles.panel_data,'Visible','on')
+            set(h.uihandles.panel_overview,'Visible','on')
+            
+            set(h.uihandles.panel_single_cluster,'Visible','on')
+            set(h.uihandles.panel_single_ROI,'Visible','on')
+            
+            set(h.c_disp.c(h.status.current_window).radio_active ,'Visible', 'on')
+            set(h.c_disp.c(h.status.current_window).ax_ROI_display,'Position',h.c_disp.c(h.status.current_window).ax_sizes{1})
+            set(h.c_disp.c(h.status.current_window).ax_ROI_display_stats,'Position',h.c_disp.c(h.status.current_window).ax_sizes{2})
+            set(h.c_disp.c(h.status.current_window).ax_ROI_clusterstats,'Position',h.c_disp.c(h.status.current_window).ax_sizes{3})
+            
+            h.status.current_window = NaN;
+          end
+        end
+      end
+    end
+    
+    
+    function checkbox_enlarge_Callback(h,hObject,eventdata)
+      
+      if get(h.uihandles.checkbox_enlarge,'Value')
+        set(h.uihandles.figure1,'WindowButtonMotionFcn',@h.enlarge_clusterdisp)
+      else
+        set(h.uihandles.figure1,'WindowButtonMotionFcn',[])
+      end
+      
+    end
+    
+    
+    
     function ButtonDown_pickROIstat(h, hObject, eventdata, obj, ID)
       
     % ID contains: (c,s,n)
@@ -2450,7 +2565,7 @@ classdef ROI_matching < handle
           if ~any(isnan(h.c_disp.active.picked.ROI))
             h.checkbox_ROI_unsure_Callback(h.uihandles.checkbox_ROI_unsure,[])
           else
-            h.checkbox_unsure_Callback(h.uihandles.checkbox_unsure,[])
+            h.checkbox_unsure_Callback(h.c_disp.active.checkbox_unsure,[])
           end
         case 'c'
           h.toggle_processed([],[],c)
@@ -2662,7 +2777,6 @@ classdef ROI_matching < handle
       h.toggle_picked_ROI(obj,hObject,ID)
       
       if ~h.status.deleted(c)
-        delete(h.plots.cluster_handles(c))
         h.plot_cluster_shape(c)
         set(h.plots.cluster_handles(c),'Color','m')
       end
@@ -2688,25 +2802,28 @@ classdef ROI_matching < handle
     
     function update_statusboxes(h)
     
-      c = h.c_disp.active.picked.cluster;
-      if ~isempty(c)
-        set(h.uihandles.checkbox_processed,'Value',h.status.processed(c),'enable','on')
-        set(h.uihandles.checkbox_unsure,'Value',h.status.unsure(c),'enable','on')
-        
-        set(h.uihandles.checkbox_manipulation_pending,'Value',false)
-        set(h.uihandles.checkbox_manipulated,'Value',false)
-        
-        if h.clusters(c).status.manipulated == 1
-          set(h.uihandles.checkbox_manipulated,'Value',true)
-        elseif h.clusters(c).status.manipulated == 2
-          set(h.uihandles.checkbox_manipulation_pending,'Value',true)
+      
+      for obj = h.c_disp.c
+        c = obj.picked.cluster;
+        if ~isempty(c)
+          set(obj.checkbox_processed,'Value',h.status.processed(c),'enable','on')
+          set(obj.checkbox_unsure,'Value',h.status.unsure(c),'enable','on')
+          
+          set(obj.checkbox_pending,'Value',false)
+          set(obj.checkbox_manipulated,'Value',false)
+          
+          if h.clusters(c).status.manipulated == 1
+            set(obj.checkbox_manipulated,'Value',true)
+          elseif h.clusters(c).status.manipulated == 2
+            set(obj.checkbox_pending,'Value',true)
+          end
+          
+        else
+          set(obj.checkbox_processed,'Value',false,'enable','off')
+          set(obj.checkbox_unsure,'Value',false,'enable','off')
+          set(obj.checkbox_pending,'Value',false)
+          set(obj.checkbox_manipulated,'Value',false)
         end
-        
-      else
-        set(h.uihandles.checkbox_processed,'Value',false,'enable','off')
-        set(h.uihandles.checkbox_unsure,'Value',false,'enable','off')
-        set(h.uihandles.checkbox_manipulation_pending,'Value',false)
-        set(h.uihandles.checkbox_manipulated,'Value',false)
       end
     end
     
@@ -3081,14 +3198,17 @@ classdef ROI_matching < handle
       
 %        set(hObject,'enable','off')
       disp('now executing all desired manipulations')
+      warning('off','all')
       
+      h.button_toggle_time_Callback([],[])
       %% going though sessions and process all manipulations of a single session at once (save loading time...)
       footprints = getappdata(0,'footprints');
       margin = 5;
       
       for s = 1:h.data.nSes
         status = [h.status.session(s).manipulation.processed];
-        status = any(~status);
+        undone_status = [h.status.session(s).manipulation.undone];
+        status = any(~status & ~undone_status);
         if length(h.status.session(s).manipulation) && status
           
           pathSession = pathcat(h.path.mouse,sprintf('Session%02d',s));
@@ -3172,6 +3292,8 @@ classdef ROI_matching < handle
       clear Y
       clear footprints
       set(hObject,'enable','on')
+      uiwait(msgbox('manipulations finished so far'))
+      h.button_toggle_time_Callback([],[])
     end
     
     
@@ -3285,7 +3407,7 @@ classdef ROI_matching < handle
         hold(ax_Ca_post,'off')
         hold(ax_S,'off')
         
-        linkaxes([ax_Ca_pre,ax_Ca_post,ax_S],'x')
+%          linkaxes([ax_Ca_pre,ax_Ca_post,ax_S],'x')
         
         
       %%% add as text somewhere in the plot
@@ -3358,7 +3480,8 @@ classdef ROI_matching < handle
       end
       
       h.replot_clusters(c)
-      
+      set(h.uihandles.button_save,'enable','on')
+%        h.button_save_Callback([],[])
     end
     
     
