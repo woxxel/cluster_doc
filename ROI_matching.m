@@ -113,6 +113,8 @@ classdef ROI_matching < handle
           set(obj.radio_active,'Callback',{@h.radio_active_Callback})
         end
         
+        h.c_disp.active.picked.cluster = [];
+        
         set(h.uihandles.entry_filter1_value,'Callback',@h.entry_filter_value_Callback)
         set(h.uihandles.entry_filter2_value,'Callback',@h.entry_filter_value_Callback)
         
@@ -159,6 +161,7 @@ classdef ROI_matching < handle
         set(h.uihandles.button_toggle_time,'Callback',@h.button_toggle_time_Callback)
         
         set(h.uihandles.checkbox_enlarge,'Callback',@h.checkbox_enlarge_Callback)
+        
         
       end
       
@@ -282,7 +285,7 @@ classdef ROI_matching < handle
       h.t.timer.ExecutionMode = 'fixedRate';
       h.t.timer.TimerFcn = @(~,event) h.update_time(); % Here is where you assign the callback function
       
-      nSes = 15;
+      nSes = [];
       footprints = match_loadSessions(h.path.mouse,nSes);
       setappdata(0,'footprints',footprints)
       
@@ -399,6 +402,18 @@ classdef ROI_matching < handle
       h.wbar.ct = 0;
       h.init_plot();
       
+      ct = 0;
+      for c = 1:nCluster
+        x_pos = h.clusters(c).centroid(2);
+        y_pos = h.clusters(c).centroid(1);
+        border_prox = min(min(y_pos-1,h.data.imSize(1)-y_pos),min(x_pos-1,h.data.imSize(2)-x_pos));
+        if border_prox < 5
+            ct = ct + 1;
+            h.emptyCluster(h.clusters(c));
+        end
+      end
+      disp(sprintf('removed: %d',ct))
+      
       h.update_table()
       
       close(h.wbar.handle)
@@ -458,7 +473,7 @@ classdef ROI_matching < handle
       h.status.deleted(c) = true;
       
       h.status.active(c) = false;
-      uiwait(msgbox(sprintf('cluster %d was deleted',c)))
+      disp(sprintf('cluster %d was deleted',c))
       
       if ~isempty(obj)
         obj.picked.cluster = [];
@@ -621,44 +636,53 @@ classdef ROI_matching < handle
 
 
     % --- Executes on button press in checkbox_show_all_sessions.
-    function checkbox_show_all_sessions_Callback(h, hObject, eventdata)
+    function checkbox_show_all_sessions_Callback(h, hObject, eventdata, new_val)
     % hObject    handle to checkbox_show_all_sessions (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
 
     % Hint: get(hObject,'Value') returns toggle state of checkbox_show_all_sessions
       
-      if get(hObject,'Value')
-        for s = 1:h.data.nSes
-          h.status.session(s).visible = true;
-        end
-        set(h.uihandles.button_next_session,'enable','off')
-        set(h.uihandles.button_prev_session,'enable','off')
-        set(h.uihandles.entry_display_session,'enable','off')
-      else
-        for s = 1:h.data.nSes
-          h.status.session(s).visible = false;
-        end
-        s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
-        if isempty(s_vis) || ~s_vis
-          s_vis = 0;
-          set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
-        else
-          h.status.session(s_vis).visible = true;
-        end
-        
-        if s_vis < h.data.nSes
-          set(h.uihandles.button_next_session,'enable','on')
-        end
-        
-        if s_vis > 0
-          set(h.uihandles.button_prev_session,'enable','on')
-        end
-        
-        set(h.uihandles.entry_display_session,'enable','on')
+      if nargin < 4
+        new_val = NaN;
       end
       
-      h.display_sessions(h.c_disp.active)
+      if new_val ~= logical(get(h.uihandles.checkbox_show_all_sessions,'Value'))
+        if nargin == 4
+          set(h.uihandles.checkbox_show_all_sessions,'Value',new_val)
+        end
+        if get(h.uihandles.checkbox_show_all_sessions,'Value')
+          for s = 1:h.data.nSes
+            h.status.session(s).visible = true;
+          end
+          set(h.uihandles.button_next_session,'enable','off')
+          set(h.uihandles.button_prev_session,'enable','off')
+          set(h.uihandles.entry_display_session,'enable','off')
+        else
+          for s = 1:h.data.nSes
+            h.status.session(s).visible = false;
+          end
+          s_vis = str2num(get(h.uihandles.entry_display_session,'String'));
+          if isempty(s_vis) || ~s_vis
+            s_vis = 0;
+            set(h.uihandles.entry_display_session,'String',sprintf('%d',s_vis))
+          else
+            h.status.session(s_vis).visible = true;
+          end
+          
+          if s_vis < h.data.nSes
+            set(h.uihandles.button_next_session,'enable','on')
+          end
+          
+          if s_vis > 0
+            set(h.uihandles.button_prev_session,'enable','on')
+          end
+          
+          set(h.uihandles.entry_display_session,'enable','on')
+        end
+        
+        h.display_sessions(h.c_disp.active)
+      end
     end
     
     
@@ -963,7 +987,7 @@ classdef ROI_matching < handle
       
 %        if (h.clusters(c).status.manipulated==2) && new_val
 %          uiwait(msgbox('Cluster cannot be marked as complete, as long as there are manipulations pending!'))
-      if h.status.polyROI(c) && new_val
+      if (h.status.polyROI(c) || h.status.multiROI(c)) && new_val
         uiwait(msgbox('There are multiassignments in this cluster. Please remove those bevore marking as complete'))
       else
         h.status.processed(c) = new_val;
@@ -1166,7 +1190,7 @@ classdef ROI_matching < handle
       set(hObject,'enable','off')
       h.button_toggle_time_Callback([],[])
       
-      h.t.now = toc(h.t.start)+h.t.offset;
+%        h.t.now = toc(h.t.start)+h.t.offset;
       
       h.set_paths()%'/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/save/884')
       
@@ -1217,7 +1241,7 @@ classdef ROI_matching < handle
       data.listener = [];
       
       
-      status.time = h.t.now;
+      status.time = h.t.offset;
       
       save(h.path.results,'clusters_sv','status','data','-v7.3')
       uiwait(msgbox(sprintf('data saved @ %s',h.path.results)))
@@ -2538,7 +2562,7 @@ classdef ROI_matching < handle
     
     
     function ButtonDown_pickCluster(h,hObject,eventdata)
-
+    
       coords = get(hObject,'CurrentPoint');
       
       [min_val c_idx] = min(sum((h.data.cluster_centroids(h.status.active & h.status.plotted,1)-coords(1,2)).^2 + (h.data.cluster_centroids(h.status.active & h.status.plotted,2)-coords(1,1)).^2,2));
@@ -2704,10 +2728,10 @@ classdef ROI_matching < handle
       else
         set(obj.slider_cluster_ID,'Value',0)
       end
-      
       h.update_statusboxes()
       
       h.plot_cluster(obj,c);
+      h.checkbox_show_all_sessions_Callback([],[],true)
       set(obj.entry_cluster_ID,'String',sprintf('%d',c))
       
     end

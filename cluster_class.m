@@ -40,6 +40,7 @@ classdef cluster_class < handle
     
     function this = cluster_class(nC,IDs,h,clusters,status,footprints,xdata)
       
+      ct = 0;
       if nargin ~= 0
         
         if nC == 1

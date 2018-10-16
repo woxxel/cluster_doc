@@ -7,13 +7,13 @@ function footprints = match_loadSessions(pathMouse,nSes)
     if ~exist(savePath,'file')
       tic
       pathSessions = dir(pathcat(pathMouse,'Session*'));
-      if nargin ==2 && ~isempty(nSes)
+      if nargin==2 && ~isempty(nSes)
         pathSessions = pathSessions(1:nSes);
       else
         nSes = length(pathSessions);
       end
       
-      border_prox_thr = 3;
+      border_prox_thr = 5;
       rot_max = 1;
       rot = linspace(-rot_max,rot_max,10*rot_max+1);
       
