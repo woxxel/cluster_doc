@@ -8,6 +8,7 @@ function footprints = match_loadSessions(pathMouse,nSes)
       tic
       pathSessions = dir(pathcat(pathMouse,'Session*'));
       if nargin==2 && ~isempty(nSes)
+        nSes = min(nSes,length(pathSessions));
         pathSessions = pathSessions(1:nSes);
       else
         nSes = length(pathSessions);
@@ -92,7 +93,9 @@ function footprints = match_loadSessions(pathMouse,nSes)
         end
         
         for n=1:nROI
-          footprints.session(s).ROI(n).A = sparse(A_tmp(:,:,n));
+          
+%            footprints.session(s).ROI(n).A = sparse(A_tmp(:,:,n));          
+          footprints.session(s).ROI(n).A = sparse(A_tmp(:,:,n)/sum(sum(A_tmp(:,:,n))));
           
           A_tmp_norm = sparse(footprints.session(s).ROI(n).A/sum(footprints.session(s).ROI(n).A(:)));
           footprints.session(s).ROI(n).centroid = [sum((1:footprints.data.imSize(1))*A_tmp_norm),sum(A_tmp_norm*(1:footprints.data.imSize(2))')];
@@ -113,16 +116,17 @@ function footprints = match_loadSessions(pathMouse,nSes)
         footprints.data.session(s).nROI = nnz(~mask);
         nROIs = nROIs + footprints.data.session(s).nROI;
         
-        
-        saveCaPath = pathcat(pathMouse,pathSessions(s).name,'CaData.mat');
-%          if ~exist(saveCaPath,'file')
-        load(path_ROI,'C2')
-        C2(mask,:) = [];
-%          S2(mask,:) = [];
-        save(saveCaPath,'C2','-v7.3')
-        disp(sprintf('saved CaData @ %s',saveCaPath))
-        clear C2
-        clear S2
+%          if exist('C2','var')
+            saveCaPath = pathcat(pathMouse,pathSessions(s).name,'CaData.mat');
+    %          if ~exist(saveCaPath,'file')
+            load(path_ROI,'C2')
+            C2(mask,:) = [];
+    %          S2(mask,:) = [];
+            save(saveCaPath,'C2','-v7.3')
+            disp(sprintf('saved CaData @ %s',saveCaPath))
+            clear C2
+            clear S2
+%          end
 %          end
         
       end

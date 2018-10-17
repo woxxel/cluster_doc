@@ -285,7 +285,7 @@ classdef ROI_matching < handle
       h.t.timer.ExecutionMode = 'fixedRate';
       h.t.timer.TimerFcn = @(~,event) h.update_time(); % Here is where you assign the callback function
       
-      nSes = [];
+      nSes = 15;
       footprints = match_loadSessions(h.path.mouse,nSes);
       setappdata(0,'footprints',footprints)
       
@@ -307,7 +307,7 @@ classdef ROI_matching < handle
         clusters = ld_data.clusters_sv;
         status = ld_data.status;
       else
-        real_matching(footprints.data,0.8);
+        real_matching(footprints.data,0.5);
         clusters = getappdata(0,'clusters');
         status = [];
       end
@@ -510,23 +510,35 @@ classdef ROI_matching < handle
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
       
-      c = max(1,round(get(hObject, 'Value')));
+      c_array = h.status.active & ~h.status.deleted;
       
-      direction = sign(c-obj.picked.cluster);
-      
-      %% find next active
-      while c>h.data.nCluster || c < 1 || ~h.status.active(c) || h.status.deleted(c) || (get(obj.checkbox_cluster_ID_skip_processed,'Value') && h.status.processed(c))
-        if direction > 0
-          c = mod(c,h.data.nCluster)+1;
-        else
-          c = mod(c-2,h.data.nCluster)+1;
-        end
+      if get(obj.checkbox_cluster_ID_skip_processed,'Value')
+        c_array = c_array & ~h.status.processed;
       end
       
-      set(hObject, 'Value', c);
-      set(obj.entry_cluster_ID,'String',sprintf('%d',c))
+      if any(c_array)
+        c = max(1,round(get(hObject, 'Value')));
+        
+        direction = sign(c-obj.picked.cluster);
+        
+        %% find next active
+        while c>h.data.nCluster || c < 1 || ~h.status.active(c) || h.status.deleted(c) || (get(obj.checkbox_cluster_ID_skip_processed,'Value') && h.status.processed(c))
+            if direction > 0
+            c = mod(c,h.data.nCluster)+1;
+            else
+            c = mod(c-2,h.data.nCluster)+1;
+            end
+        end
+        
+        set(hObject, 'Value', c);
+        set(obj.entry_cluster_ID,'String',sprintf('%d',c))
+        
+        h.choose_cluster(obj,c);
+      else
+        uiwait(msgbox('No active cluster to switch to. Consider changing the filter'))
+        set(hObject,'Value',h.c_disp.active.picked.cluster)
+      end
       
-      h.choose_cluster(obj,c);
     end
     
     
@@ -2043,7 +2055,6 @@ classdef ROI_matching < handle
               %%% here comes 3D plotting
               A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
               A_tmp(A_tmp==0) = NaN;
-              
               obj.session(s).ROI(i) = surf(obj.ax_ROI_display,X,Y,-2*A_tmp+s);
             else
               %%% here comes 2D plotting
@@ -3619,6 +3630,9 @@ function real_matching(data,p_thr)
         
         clusters(c).session(s).list = n;
         
+        s_ref = s;
+        n_ref = n;
+        
         if mod(c,500)==0
           disp(sprintf('%d clusters found.',c))
         end
@@ -3630,21 +3644,24 @@ function real_matching(data,p_thr)
           
           if strcmp(mode,'threshold')
             
-            matches_s = find(xdata(s,sm).prob(n,:)>p_thr);
-            p_same_s = xdata(s,sm).prob(n,matches_s);
+            matches_s = find(xdata(s_ref,sm).prob(n_ref,:)>p_thr);
+            p_same_s = xdata(s_ref,sm).prob(n_ref,matches_s);
             
             [p_best_s,idx_s] = max(p_same_s);
             if p_best_s > p_thr
               best_match_s = matches_s(idx_s);
               
               %% check for reciprocity
-              matches_s_ref = find(xdata(sm,s).prob(best_match_s,:)>p_thr);
-              p_same_s_ref = xdata(sm,s).prob(best_match_s,matches_s_ref);
+              matches_s_ref = find(xdata(sm,s_ref).prob(best_match_s,:)>p_thr);
+              p_same_s_ref = xdata(sm,s_ref).prob(best_match_s,matches_s_ref);
               
               [p_best_s_ref,idx_s_ref] = max(p_same_s_ref);
               
-              if (matches_s_ref(idx_s_ref) == n) && (p_best_s_ref > p_thr)% && ~session(sm).ROI_matched(best_match_s)
+              if (matches_s_ref(idx_s_ref) == n_ref) && (p_best_s_ref > p_thr)% && ~session(sm).ROI_matched(best_match_s)
                 clusters(c).session(sm).list = best_match_s;
+                
+                s_ref = sm;
+                n_ref = best_match_s;
               end
             end
           end
