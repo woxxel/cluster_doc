@@ -60,7 +60,7 @@ classdef ROI_matching < handle
                   [0.3, 0.12, 0.07, 0.3],...
                   [0.03, 0.52, 0.25, 0.1],...
                   [0.03, 0.12, 0.4, 0.6],...
-                  [0.45, 0.12, 0.07, 0.6],...
+                  [0.45, 0.12, 0.07, 0.6],...3
                   [0.03, 0.77, 0.4, 0.1]};
         pos_txt = {[0.03 0.4 0.05 0.035],...
                   [0.03 0.36 0.06 0.035]};
@@ -2056,6 +2056,15 @@ classdef ROI_matching < handle
               A_tmp = full(footprints.session(s).ROI(n).A(y_lims(1):y_lims(2),x_lims(1):x_lims(2)));
               A_tmp(A_tmp==0) = NaN;
               obj.session(s).ROI(i) = surf(obj.ax_ROI_display,X,Y,-2*A_tmp+s);
+              
+%                if s>1
+%                  s
+%                  [h.clusters(c).session(s).centroid(2) h.clusters(c).session(s).centroid(2)-h.clusters(c).session(s).shift(2)]
+%                  [h.clusters(c).session(s).centroid(1) h.clusters(c).session(s).centroid(1)-h.clusters(c).session(s).shift(1)]
+%                  [s s-h.clusters(c).session(s).shift(3)]
+%                  
+%                  plot3(obj.ax_ROI_display,[h.clusters(c).session(s).centroid(2) h.clusters(c).session(s).centroid(2)-h.clusters(c).session(s).shift(2)]-x_lims(1),[h.clusters(c).session(s).centroid(1) h.clusters(c).session(s).centroid(1)-h.clusters(c).session(s).shift(1)]-y_lims(1),[s s-h.clusters(c).session(s).shift(3)],'r-')
+%                end
             else
               %%% here comes 2D plotting
               col = ones(3,1)*4*s/(5.*h.data.nSes);
@@ -2135,8 +2144,8 @@ classdef ROI_matching < handle
           
           zlabel(obj.ax_ROI_display,'session')
           
-          xlim(obj.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
-          ylim(obj.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
+%            xlim(obj.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
+%            ylim(obj.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
         else
           rotate3d(obj.ax_ROI_display,'off')
           set(h.uihandles.checkbox_rotate3d,'Value',0)
@@ -2731,6 +2740,35 @@ classdef ROI_matching < handle
       
       %% set overall plot and GUI controls
       if ~isempty(c)
+        
+%          %% there should be an update here for all marked changes
+%          footprints = getappdata(0,'footprints');
+%          %% calculate score anew:
+%          shifts = cumsum(cat(1,h.clusters(c).session.shift),'omitnan');
+%          corr = zeros(h.data.nSes,1);
+%          for s_ref = 1:h.data.nSes
+%  %              for i = 1:h.clusters(c).stats.occupancy(s_ref)
+%              for n_ref = h.clusters(c).session(s_ref).list
+%                  %% translate fp-position by shift from former session
+%                  A_tmp_ref = imtranslate(full(footprints.session(s_ref).ROI(n_ref).A),-fliplr(shifts(s_ref,1:2)));
+%                  j = 0;
+%                  for s = 1:h.data.nSes
+%                      for n = h.clusters(c).session(s).list
+%                          if ~all([s_ref n_ref]==[s n])
+%                              j = j+1;
+%                              A_tmp = imtranslate(full(footprints.session(s).ROI(n).A),-fliplr(shifts(s,1:2)));
+%                              corr(s_ref) = corr(s_ref) + dot(A_tmp_ref(:),A_tmp(:))/(norm(A_tmp_ref(:))*norm(A_tmp(:)));
+%                          end
+%                      end
+%                  end
+%              end
+%              corr(s_ref) = corr(s_ref)/(sum(h.clusters(c).stats.occupancy) - 1);
+%          end
+%          score = mean(corr(corr>0))^(1+var(corr(corr>0)));
+%          disp(sprintf('score: %5.3g',score))
+%          
+        
+        
         if ~h.status.plotted(c)
           h.plot_cluster_shape(c)
         end
@@ -3282,18 +3320,11 @@ classdef ROI_matching < handle
               IDs = cat(1,h.status.session(s).manipulation(idx).post.ID);
               for n = 1:footprints.data.session(s).nROI
                 if ~ismember(n,IDs(:,2)) && ~h.status.session(s).deleted(n)
-                  if isempty(footprints.session(s).ROI(n).A)
-                    disp('removing')
-                    [s n]
-                    h.data.session(s).ROI(n).cluster_ID
-                    h.remove_ROI(s,n)
-                  else
-                    A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
-                    if nnz(A_tmp) > 10;
+                  A_tmp = footprints.session(s).ROI(n).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2));
+                  if nnz(A_tmp) > 10;
                       A_in.ct = A_in.ct + 1;
                       A_in.footprint(:,:,A_in.ct) = full(A_tmp);
                       A_in.status(A_in.ct) = false;
-                    end
                   end
                 end
               end
@@ -3314,7 +3345,7 @@ classdef ROI_matching < handle
                   A_in.C(j,t) = sum(sum(A_tmp.*Y_tmp(:,:,t)));
                 end
               end
-              ROI_out = manipulate_CNMF(h,h.status.session(s).manipulation(idx),h.path,Y_tmp,A_in);%single(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)));
+              ROI_out = manipulate_CNMF(h.data.imSize,Y_tmp,A_in);%single(Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)));
               
               Cn = correlation_image(Y_tmp);%Y(extents(1,1):extents(1,2),extents(2,1):extents(2,2),:)); % image statistic (only for display purposes)
               

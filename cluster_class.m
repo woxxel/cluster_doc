@@ -9,7 +9,7 @@ classdef cluster_class < handle
     ID                % x -> should know, who he is
     nSes              % x -> cheap and useful
     
-    session           = struct('list',[],'ROI',struct)
+    session           = struct('list',[],'centroid',[],'ROI',struct)
 %          list          % x
 %          ROI   
 %              dist
@@ -166,9 +166,24 @@ classdef cluster_class < handle
       imSize = size(footprints.session(1).ROI(1).A);
       this.A = sparse(imSize(1),imSize(2));
       
+      s_ref = NaN;
       for s = 1:this.nSes
-        for n = this.session(s).list
+        this.session(s).centroid = zeros(1,2);
+        for i = 1:this.stats.occupancy(s)
+          n = this.session(s).list(i);
           this.A = this.A + footprints.session(s).ROI(n).A;
+          this.session(s).centroid(i,:) = footprints.session(s).ROI(n).centroid;
+        end
+        if this.stats.occupancy(s)
+          if ~isnan(s_ref)
+            this.session(s).shift(1:2) = mean(this.session(s).centroid(i,:),1) - mean(this.session(s_ref).centroid(i,:),1);
+            this.session(s).shift(3) = s-s_ref;
+          else
+            this.session(s).shift = [NaN NaN NaN];
+          end
+          s_ref = s;
+        else
+          this.session(s).shift = [NaN NaN NaN];
         end
       end
       if sum(this.A(:))
