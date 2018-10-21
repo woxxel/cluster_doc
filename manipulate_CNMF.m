@@ -1,9 +1,9 @@
 
 %% inputs: dataset to run CNMF on
 
-function [ROI_out] = manipulate_CNMF(h,manipulate,path,Y,A_in)
+function [ROI_out] = manipulate_CNMF(imSize,Y,A_in)
   
-  
+  warning('off','all')
 %    if isempty(manipulate)
 %  
 %  %      manipulate.pre.ID = [1, 213];
@@ -92,9 +92,9 @@ function [ROI_out] = manipulate_CNMF(h,manipulate,path,Y,A_in)
       'nb',2,...                                  % number of background components    
       'min_SNR',3,...                             % minimum SNR threshold
       'space_thresh',0.5,...                      % space correlation threshold
-      'cnn_thr',0.2,...                            % threshold for CNN classifier
+      'cnn_thr',0.2,...                           % threshold for CNN classifier
       'flag_g',1);
-  options.min_fitness = -50;
+  options.min_fitness = -70;
   
   %% Data pre-processing
   [P,Y] = preprocess_data(Y,p);
@@ -104,12 +104,14 @@ function [ROI_out] = manipulate_CNMF(h,manipulate,path,Y,A_in)
   
   Yr = reshape(Y,d,T);
   
-  %% update spatial components
-  [A_CNMF,b_out,C_out] = update_spatial_components(Yr,C_out,f_out,[A_CNMF,b_out],P,options);
-    
-  %% update temporal components
-%    P.p = 0;    % set AR temporarily to zero for speed
-  [C_out,f_out,P,S,YrA] = update_temporal_components(Yr,A_CNMF,b_out,C_out,f_out,P,options);
+  for i=1:2
+    %% update spatial components
+    [A_CNMF,b_out,C_out] = update_spatial_components(Yr,C_out,f_out,[A_CNMF,b_out],P,options);
+        
+    %% update temporal components
+    %    P.p = 0;    % set AR temporarily to zero for speed
+    [C_out,f_out,P,S,YrA] = update_temporal_components(Yr,A_CNMF,b_out,C_out,f_out,P,options);
+  end
   
   
 %%% -------------------------------- prepare output ------------------------------------
@@ -117,18 +119,20 @@ function [ROI_out] = manipulate_CNMF(h,manipulate,path,Y,A_in)
 %    pathCa = pathcat(path.mouse,sprintf('Session%02d',s),'CaData.mat');
 %    ld_Ca = load(pathCa);
   
-  ROI_out(sum(A_in.status)) = struct('A',zeros(h.data.imSize(1),h.data.imSize(2)),'norm',NaN,'centroid',[],'fitness',NaN,'C',[],'S',[]);
+  ROI_out(sum(A_in.status)) = struct('A',zeros(imSize(1),imSize(2)),'norm',NaN,'centroid',[],'fitness',NaN,'C',[],'S',[]);
   for i = 1:sum(A_in.status)
-    ROI_out(i).A = sparse(h.data.imSize(1),h.data.imSize(2));
+%    for i = 1:A_in.ct
+    ROI_out(i).A = sparse(imSize(1),imSize(2));
     ROI_out(i).A(A_in.extents(1,1):A_in.extents(1,2),A_in.extents(2,1):A_in.extents(2,2)) = reshape(A_CNMF(:,i),d1,d2);
     ROI_out(i).norm = norm(ROI_out(i).A(:));
     A_tmp = ROI_out(i).A/sum(ROI_out(i).A(:));
-    ROI_out(i).centroid = [sum((1:h.data.imSize(1))*A_tmp),sum(A_tmp*(1:h.data.imSize(2))')];
+    ROI_out(i).centroid = [sum((1:imSize(1))*A_tmp),sum(A_tmp*(1:imSize(2))')];
     
     ROI_out(i).fitness = compute_event_exceptionality(C_out(i,:)+YrA(i,:),options.N_samples_exc,options.robust_std);
     
     ROI_out(i).C = C_out(i,:);
-    [ROI_out(i).C_dec, ROI_out(i).S] = deconvolveCa(C_out(i,:));
+    [ROI_out(i).C_dec, ROI_out(i).S] = deconvolveCa(C_out(i,:),'ar1',0.9);%,'optimize_b',true,'optimize_pars',true,'maxIter',10);
+    
   end
   
 %    query_manipulate(path,s,Cn,manipulate,A_in,ROI_out)
