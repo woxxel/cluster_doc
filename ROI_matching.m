@@ -51,12 +51,12 @@ classdef ROI_matching < handle
           set(h.uihandles.button_FP_path,'enable','on')
           set(h.uihandles.entry_FP_path,'String',paths.footprints,'enable','on')
           set(h.uihandles.entry_FP_field,'String',paths.footprints_field)
-          set(h.uihandles.checkbox_FP_single_file,'enable','on')
+%            set(h.uihandles.checkbox_FP_single_file,'enable','on')
           
           set(h.uihandles.button_BG_path,'enable','on')
           set(h.uihandles.entry_BG_path,'String',paths.background,'enable','on')
           set(h.uihandles.entry_BG_field,'String',paths.background_field)
-          set(h.uihandles.checkbox_BG_single_file,'enable','on')
+%            set(h.uihandles.checkbox_BG_single_file,'enable','on')
           
           set(h.uihandles.checkbox_load_processed_data,'enable','on')
           
@@ -146,13 +146,15 @@ classdef ROI_matching < handle
         set(h.uihandles.button_FP_path,'Callback',@h.button_FP_path_Callback)
         set(h.uihandles.entry_FP_path,'Callback',@h.entry_FP_path_Callback)
         set(h.uihandles.button_FP_field,'Callback',@h.button_FP_field_Callback)
-        set(h.uihandles.checkbox_FP_single_file,'Callback',@h.checkbox_FP_single_file_Callback)
+        set(h.uihandles.checkbox_FP_single_file,'Callback',@h.checkbox_FP_single_file_Callback,'enable','off')
         
         set(h.uihandles.button_BG_path,'Callback',@h.button_BG_path_Callback)
         set(h.uihandles.entry_BG_path,'Callback',@h.entry_BG_path_Callback)
         set(h.uihandles.button_BG_field,'Callback',@h.button_BG_field_Callback)
-        set(h.uihandles.checkbox_BG_single_file,'Callback',@h.checkbox_BG_single_file_Callback)
+        set(h.uihandles.checkbox_BG_single_file,'Callback',@h.checkbox_BG_single_file_Callback,'enable','off')
         
+        
+        set(h.uihandles.figure1,'SizeChangedFcn',@h.ui_SizeChangeFcn)
         
         
         set(h.uihandles.entry_ROI_adjacency,'Callback',@h.entry_ROI_adjacency_Callback)
@@ -3912,6 +3914,27 @@ classdef ROI_matching < handle
       setappdata(0,'xdata',xdata)
       h.status.save.xdata = true;
     end
+    
+    
+    
+    
+    
+    
+    function ui_SizeChangeFcn(h,hObject,eventdata)
+        
+        %% at the moment only for unit-based
+        pos_fig = get(h.uihandles.figure1,'Position');
+        
+        pos_panel_overview = get(h.uihandles.panel_overview,'Position');
+        pos_panel_overview(2) = pos_fig(4)-250;
+        set(h.uihandles.panel_overview,'Position',pos_panel_overview);
+        
+        pos_panel_data = get(h.uihandles.panel_data,'Position');
+        pos_panel_data(2) = pos_fig(4)-460;
+        set(h.uihandles.panel_data,'Position',pos_panel_data);
+        
+    end
+    
   end
 end
 
