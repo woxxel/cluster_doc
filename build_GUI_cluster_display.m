@@ -68,7 +68,7 @@ classdef build_GUI_cluster_display < handle
       pos_GUI{2} = [pos_ax{1}(1) + (pos_ax{1}(3)-0.07), pos_ax{1}(2)-0.07, 0.03, 0.02];
       pos_GUI{3} = [pos_ax{1}(1) + (pos_ax{1}(3)-0.03), pos_ax{1}(2)-0.07, 0.03, 0.025];
       pos_GUI{4} = [pos_ax{1}(1), pos_ax{1}(2)-0.09, 0.075, 0.02];
-      pos_GUI{5} = [pos_ax{1}(1) + pos_ax{1}(3)/2, pos_ax{1}(2)+pos_ax{1}(4)+0.07, 0.05, 0.02];
+      pos_GUI{5} = [pos_ax{1}(1) + pos_ax{1}(3)/2, pos_ax{1}(2)+pos_ax{1}(4)+0.01, 0.05, 0.02];
       
       pos_GUI{6} = [pos_ax{2}(1), pos_ax{2}(2)-0.11, pos_ax{2}(3), 0.09];
       

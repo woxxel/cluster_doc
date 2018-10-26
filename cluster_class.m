@@ -146,6 +146,46 @@ classdef cluster_class < handle
       
       for s = 1:this.nSes
         for n = this.session(s).list
+%            [s n]
+%            if n > length(h.data.session(s).ROI)
+%              disp('removing:')
+%              [s n]
+%  %              h.remove_ROI(s,n)
+%              this.session(s).list
+%              this.session(s).list(this.session(s).list==n) = [];
+%              length(h.data.session(s).ROI)
+%              h.data.session(s).nROI
+%              this.stats.occupancy(s) = this.stats.occupancy(s) - 1;
+%              break
+%            end
+%              i = 275;
+%              breakit = false;
+%              while i < 400
+%  %                disp('longer')
+%  %              for i = 1:length(h.status.session(s).manipulation)
+%  %                if ismember(n,[h.status.session(s).manipulation(i).pre.ID])
+%                  try
+%                    h.undo_manipulation(i)
+%                  catch
+%                    disp('not working')
+%                    breakit = true
+%                    break
+%                  end
+%                  
+%                  i
+%                  i = i+2;
+%                  disp('undone!')
+%  %                  continue
+%              end
+%              this.session(s).list(this.session(s).list==n) = [];
+%              this.stats.occupancy(s) = this.stats.occupancy(s) - 1;
+%              if breakit
+%                break
+%              end
+            
+%            end
+%            h.data.session(s).ROI(n).cluster_ID
+%            [s n]
           polyROI = length(h.data.session(s).ROI(n).cluster_ID);
           this.stats.polyROI(s) = max(this.stats.polyROI(s),polyROI);       %% if more than 1 neuron in session
           
@@ -168,23 +208,23 @@ classdef cluster_class < handle
       
       s_ref = NaN;
       for s = 1:this.nSes
-        this.session(s).centroid = zeros(1,2);
+%          this.session(s).centroid = zeros(1,2);
         for i = 1:this.stats.occupancy(s)
           n = this.session(s).list(i);
           this.A = this.A + footprints.session(s).ROI(n).A;
-          this.session(s).centroid(i,:) = footprints.session(s).ROI(n).centroid;
+%            this.session(s).centroid(i,:) = footprints.session(s).ROI(n).centroid;
         end
-        if this.stats.occupancy(s)
-          if ~isnan(s_ref)
-            this.session(s).shift(1:2) = mean(this.session(s).centroid(i,:),1) - mean(this.session(s_ref).centroid(i,:),1);
-            this.session(s).shift(3) = s-s_ref;
-          else
-            this.session(s).shift = [NaN NaN NaN];
-          end
-          s_ref = s;
-        else
-          this.session(s).shift = [NaN NaN NaN];
-        end
+%          if this.stats.occupancy(s)
+%            if ~isnan(s_ref)
+%              this.session(s).shift(1:2) = mean(this.session(s).centroid(i,:),1) - mean(this.session(s_ref).centroid(i,:),1);
+%              this.session(s).shift(3) = s-s_ref;
+%            else
+%              this.session(s).shift = [NaN NaN NaN];
+%            end
+%            s_ref = s;
+%          else
+%            this.session(s).shift = [NaN NaN NaN];
+%          end
       end
       if sum(this.A(:))
         this.A = sparse(this.A/sum(this.A(:)));
