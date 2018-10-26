@@ -39,28 +39,39 @@ classdef ROI_matching < handle
         
         pathPath = which('ROI_matching');
         [pathPath,~,~] = fileparts(pathPath);
-        pathPath = pathcat(pathPath,'path.txt');
-        if exist(pathPath)
-          fileID = fopen(pathPath);
-          pathMouse = fgetl(fileID);
-          fclose(fileID);
-        else
-          pathMouse = '/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884';
+        pathPath = pathcat(pathPath,'path.mat');
+        if exist(pathPath,'file')
+%            fileID = fopen(pathPath);
+%            pathMouse = fgetl(fileID);
+%            fclose(fileID);
+          
+          load(pathPath)
+          set(h.uihandles.entry_mouse_path,'String',paths.mouse)
+          
+          set(h.uihandles.button_FP_path,'enable','on')
+          set(h.uihandles.entry_FP_path,'String',paths.footprints,'enable','on')
+          set(h.uihandles.entry_FP_field,'String',paths.footprints_field)
+          set(h.uihandles.checkbox_FP_single_file,'enable','on')
+          
+          set(h.uihandles.button_BG_path,'enable','on')
+          set(h.uihandles.entry_BG_path,'String',paths.background,'enable','on')
+          set(h.uihandles.entry_BG_field,'String',paths.background_field)
+          set(h.uihandles.checkbox_BG_single_file,'enable','on')
+          
+          set(h.uihandles.checkbox_load_processed_data,'enable','on')
+          
         end
         
-%          set(h.uihandles.entry_data_path,'String','/home/wollex/Data/Documents/Uni/2016-XXXX_PhD/Japan/Work/Data/884')
-        set(h.uihandles.entry_data_path,'String',pathMouse)
         
-        h.set_paths()
         
         set(h.uihandles.button_save,'enable','off')
         
         %% construct GUI for single-cluster display
         pos_ax = {[0.03, 0.12, 0.25, 0.3],...
                   [0.3, 0.12, 0.07, 0.3],...
-                  [0.03, 0.52, 0.25, 0.1],...
+                  [0.03, 0.5, 0.25, 0.07],...
                   [0.03, 0.12, 0.4, 0.6],...
-                  [0.45, 0.12, 0.07, 0.6],...3
+                  [0.45, 0.12, 0.07, 0.6],...
                   [0.03, 0.77, 0.4, 0.1]};
         pos_txt = {[0.03 0.4 0.05 0.035],...
                   [0.03 0.36 0.06 0.035]};
@@ -69,7 +80,7 @@ classdef ROI_matching < handle
         
         pos_ax = {[0.72, 0.12, 0.25, 0.3],...
                   [0.63, 0.12, 0.07, 0.3],...
-                  [0.72, 0.52, 0.25, 0.1],...
+                  [0.72, 0.5, 0.25, 0.07],...
                   [0.57, 0.12, 0.4, 0.6],...
                   [0.48, 0.12, 0.07, 0.6],...
                   [0.57, 0.77, 0.4, 0.1]};
@@ -125,8 +136,24 @@ classdef ROI_matching < handle
         
         set(h.uihandles.button_toggle_active_processed,'Callback',@h.button_toggle_active_processed_Callback)
         
-        set(h.uihandles.button_data_path,'Callback',@h.button_data_path_Callback)
-        set(h.uihandles.entry_data_path,'Callback',@h.entry_data_path_Callback)
+        
+        
+        %%% data panel for setting paths paths
+        set(h.uihandles.button_mouse_path,'Callback',@h.button_mouse_path_Callback)
+        set(h.uihandles.entry_mouse_path,'Callback',@h.entry_mouse_path_Callback)
+        set(h.uihandles.checkbox_load_processed_data,'Callback',@h.checkbox_load_processed_data_Callback)
+        
+        set(h.uihandles.button_FP_path,'Callback',@h.button_FP_path_Callback)
+        set(h.uihandles.entry_FP_path,'Callback',@h.entry_FP_path_Callback)
+        set(h.uihandles.button_FP_field,'Callback',@h.button_FP_field_Callback)
+        set(h.uihandles.checkbox_FP_single_file,'Callback',@h.checkbox_FP_single_file_Callback)
+        
+        set(h.uihandles.button_BG_path,'Callback',@h.button_BG_path_Callback)
+        set(h.uihandles.entry_BG_path,'Callback',@h.entry_BG_path_Callback)
+        set(h.uihandles.button_BG_field,'Callback',@h.button_BG_field_Callback)
+        set(h.uihandles.checkbox_BG_single_file,'Callback',@h.checkbox_BG_single_file_Callback)
+        
+        
         
         set(h.uihandles.entry_ROI_adjacency,'Callback',@h.entry_ROI_adjacency_Callback)
         
@@ -238,22 +265,45 @@ classdef ROI_matching < handle
     
     function set_paths(h,pathData)
       if nargin < 2
-        h.path.mouse = get(h.uihandles.entry_data_path,'String');
+        h.path.mouse = get(h.uihandles.entry_mouse_path,'String');
       else
         h.path.mouse = pathData;
       end
       
-      h.path.footprints = pathcat(h.path.mouse,'footprints.mat');
-      h.path.xdata = pathcat(h.path.mouse,'xdata.mat');
-%        h.path.clusters = pathcat(h.path.mouse,'clusters.mat');
-      h.path.results = pathcat(h.path.mouse,'matching_results.mat');
+      if ~get(h.uihandles.checkbox_FP_single_file,'Value') || ~get(h.uihandles.checkbox_BG_single_file,'Value')
+        pathSession = dir(pathcat(h.path.mouse,'Session*'));
+        pathSession = pathSession(1).name;
+      end
       
-      %% save current path to file
-      pathPath = which('ROI_matching');
-      [pathPath,~,~] = fileparts(pathPath);
-      fileID = fopen(pathcat(pathPath,'path.txt'),'w');
-      fprintf(fileID,'%s\n',h.path.mouse);
-      fclose(fileID);
+      if ~strcmp(h.path.mouse,'')
+        if get(h.uihandles.checkbox_FP_single_file,'Value')
+          h.path.footprints_folder = '';
+          h.path.footprints = get(h.uihandles.entry_FP_path,'String');
+        else
+          h.path.footprints_folder = pathSession;
+          h.path.footprints = get(h.uihandles.entry_FP_path,'String');
+        end
+        h.path.footprints_field = get(h.uihandles.entry_FP_field,'String');
+        
+        if get(h.uihandles.checkbox_FP_single_file,'Value')
+          h.path.background_folder = '';
+          h.path.background = get(h.uihandles.entry_BG_path,'String');
+        else
+          h.path.background_folder = pathSession;
+          h.path.background = get(h.uihandles.entry_BG_path,'String');
+        end
+        h.path.background_field = get(h.uihandles.entry_BG_field,'String');
+        
+        h.path.xdata = pathcat(h.path.mouse,'xdata.mat');
+        h.path.results = pathcat(h.path.mouse,'matching_results.mat');
+        
+        
+        %% save current path to file
+        paths = h.path;
+        pathPath = which('ROI_matching');
+        [pathPath,~,~] = fileparts(pathPath);
+        save(pathcat(pathPath,'path.mat'),'paths','-v7.3')
+      end
     end
     
     % --- Outputs from this function are returned to the command line.
@@ -266,173 +316,6 @@ classdef ROI_matching < handle
     % Get default command line output from handles structure
       varargout{1} = handles.output;
     end
-    
-    
-    
-    % --- Executes on button press in button_load.
-    function button_load_Callback(h, hObject, eventdata)
-    % hObject    handle to button_load (see GCBO)
-    % eventdata  reserved - to be defined in a future version of MATLAB
-    % handles    structure with handles and user data (see GUIDATA)
-      
-      tic
-      set(hObject,'enable','off')
-      set(h.uihandles.entry_data_path,'enable','off')
-      set(h.uihandles.checkbox_load_processed_data,'enable','off')
-      
-      h.t.timer = timer(); % Put the timer object inside handles so that you can stop it later
-      h.t.timer.Period = 2;
-      h.t.timer.ExecutionMode = 'fixedRate';
-      h.t.timer.TimerFcn = @(~,event) h.update_time(); % Here is where you assign the callback function
-      
-      nSes = 15;
-      footprints = match_loadSessions(h.path.mouse,nSes);
-      setappdata(0,'footprints',footprints)
-      
-      if ~exist(h.path.xdata,'file')
-        [xdata, histo, para] = match_analyzeData(footprints,footprints.data.nSes,12);      %% calculate distances and footprint correlation
-        [model,histo] = match_buildModel(xdata,histo,para,footprints.data.nSes,h.path.mouse);
-      %    [ROC] = estimate_model_accuracy(histo,model,para,pathMouse);
-        
-        %% and assigning probabilities to each (close) pair
-        xdata = match_assign_prob(xdata,footprints.data,model,para,h.path.xdata);
-      else
-        load(h.path.xdata)
-      end
-      setappdata(0,'xdata',xdata)
-      
-      bool_ld = get(h.uihandles.checkbox_load_processed_data,'Value') && exist(h.path.results,'file');
-      if bool_ld
-        ld_data = load(h.path.results);
-        clusters = ld_data.clusters_sv;
-        status = ld_data.status;
-      else
-        real_matching(footprints.data,0.5);
-        clusters = getappdata(0,'clusters');
-        status = [];
-      end
-      
-      
-      %%% setup of prototype structures after number of clusters is known
-      nCluster = length(clusters);
-      nSes = footprints.data.nSes;
-      
-      for obj = h.c_disp.c
-        set(obj.slider_cluster_ID,'Min',0,'Max',nCluster,'Value',0,'SliderStep',[1/nCluster, 10/nCluster])
-      end
-      
-      %% setup of data structure
-      h.data = struct('nCluster',nCluster,'nSes',nSes,'imSize',footprints.data.imSize,...
-                      'session',struct('shift',cell(nSes,1),'rotation',cell(nSes,1),'nROI',cell(nSes,1),...
-                                       'ROI',struct('cluster_ID',[])),...
-                      'ct',zeros(nCluster,1),'score',zeros(nCluster,1),...
-                      'cluster_centroids',[]);
-      
-      %% setup of status structure
-      h.status = struct('save',struct('footprints',false,'xdata',false),...
-                        'manipulation_now',struct('type',[],'bool',false,'s',[],'idx',[]),...
-                        'manipulate_ct',0,...
-                        'current_window',NaN,...
-                        'picked',struct('markROIs',[],'list',[]),'mark','',...
-                        'plotted',false(nCluster,1),...
-                        'processed',false(nCluster,1),'active',true(nCluster,1),'deleted',false(nCluster,1),...
-                        'multiROI',false(nCluster,1),'polyROI',false(nCluster,1),...
-                        'unsure',false(nCluster,1),'manipulated',false(nCluster,1),...
-                        'session',struct('manipulated',cell(nSes,1),'deleted',cell(nSes,1),...
-                                         'visible',cell(nSes,1)));
-      
-      for s = 1:nSes
-        h.data.session(s).shift = footprints.data.session(s).shift;
-        h.data.session(s).rotation = footprints.data.session(s).rotation;
-        h.data.session(s).nROI = footprints.data.session(s).nROI;
-        
-        for n = 1:h.data.session(s).nROI
-          h.data.session(s).ROI(n).cluster_ID = [];
-        end
-        
-        if bool_ld
-          h.status.session(s).manipulated = 1*status.session(s).manipulated;
-          h.status.session(s).deleted = status.session(s).deleted;
-          
-          h.status.session(s).manipulation = status.session(s).manipulation;
-        else
-          h.status.session(s).manipulated = zeros(h.data.session(s).nROI,1);
-          h.status.session(s).deleted = false(h.data.session(s).nROI,1);
-          h.status.session(s).manipulation = struct('pre',{},'post',{},'prototype',{},'type',{},'processed',{},'undone',{});
-        end
-        h.status.session(s).visible = true;
-      end
-      
-      if bool_ld
-        h.status.processed = status.processed;
-        h.status.unsure = status.unsure;
-        h.status.deleted = status.deleted;
-        
-        h.status.manipulation = status.manipulation;
-        h.status.manipulate_ct = status.manipulate_ct;
-        h.t.offset = status.time;
-      else
-        h.status.manipulation = struct('ID',{});
-        h.status.manipulate_ct = 0;
-        h.t.offset = 0;
-      end
-      
-      %%% processing input from "clusters" structure (from clustering or loading)
-      h.wbar.handle = waitbar(0,'Loading and processing clusters...');
-      h.wbar.status = true;
-      h.wbar.overall = nCluster;
-      h.wbar.ct = 0;
-      
-      h.clusters = cluster_class(nCluster,1:nCluster,h,clusters,status,footprints,xdata);
-      h.data.cluster_centroids = cat(1,h.clusters.centroid);
-      h.data.listener = addlistener(h.clusters,'emptyCluster',@h.emptyCluster);   %% triggers, when cluster becomes empty
-      
-      for c = 1:nCluster
-        for s = 1:nSes
-          for n = h.clusters(c).session(s).list
-            h.data.session(s).ROI(n).cluster_ID = cat(2,h.data.session(s).ROI(n).cluster_ID,c);
-          end
-        end
-      end
-      for c = 1:nCluster
-        h.clusters(c).DUF_cluster_status(h)
-        h.update_arrays(c)
-      end
-      
-      h.wbar.ct = 0;
-      h.init_plot();
-      
-      ct = 0;
-      for c = 1:nCluster
-        x_pos = h.clusters(c).centroid(2);
-        y_pos = h.clusters(c).centroid(1);
-        border_prox = min(min(y_pos-1,h.data.imSize(1)-y_pos),min(x_pos-1,h.data.imSize(2)-x_pos));
-        if border_prox < 5
-            ct = ct + 1;
-            h.emptyCluster(h.clusters(c));
-        end
-      end
-      disp(sprintf('removed: %d',ct))
-      
-      h.update_table()
-      
-      close(h.wbar.handle)
-      h.wbar.status = false;
-      
-      h.DUF_process_info()
-      
-      uiwait(msgbox('loading of data processed'))
-      
-      set(h.uihandles.button_toggle_time,'Visible','on')
-      
-      h.t.start = tic;
-      start(h.t.timer)
-      
-      toc
-    end
-    
-    
-    
     
     
     function update_arrays(h,c)
@@ -1157,42 +1040,437 @@ classdef ROI_matching < handle
       h.remove_cluster(c);
     end
       
-      
-    % --- Executes on button press in checkbox_load_processed_data.
-    function checkbox_load_processed_data_Callback(h, hObject, eventdata)
-    % hObject    handle to checkbox_load_processed_data (see GCBO)
-    % eventdata  reserved - to be defined in a future version of MATLAB
-    % handles    structure with handles and user data (see GUIDATA)
-      
-      disp('none')
-    end
-
-        
-    function entry_data_path_Callback(h, hObject, eventdata)
-    % hObject    handle to entry_data_path (see GCBO)
-    % eventdata  reserved - to be defined in a future version of MATLAB
-    % handles    structure with handles and user data (see GUIDATA)
-      
-      h.set_paths()
-    end
-      
-      
-    % --- Executes on button press in button_data_path.
-    function button_data_path_Callback(h, hObject, eventdata)
-    % hObject    handle to button_data_path (see GCBO)
-    % eventdata  reserved - to be defined in a future version of MATLAB
-    % handles    structure with handles and user data (see GUIDATA)
-      
-      pathSearch = get(h.uihandles.entry_data_path,'String');
+    
+    
+    
+    
+    
+    
+%%% -------------------------------- data paths panel and loading -------------------------------------
+    
+    % --- Executes on button press in button_mouse_path.
+    function button_mouse_path_Callback(h, hObject, eventdata)
+      pathSearch = get(h.uihandles.entry_mouse_path,'String');
       pathName = uigetdir(pathSearch,'Choose mouse folder');
       
       if ischar(pathName)
-        set(h.uihandles.entry_data_path,'String',pathName)
-        h.set_paths()
+        if ~strcmp(pathName,get(h.uihandles.entry_mouse_path,'String'))
+          set(h.uihandles.entry_FP_path,'String','')
+          set(h.uihandles.entry_FP_field,'String','')
+          set(h.uihandles.entry_BG_path,'String','')
+          set(h.uihandles.entry_BG_field,'String','')
+        end
+        set(h.uihandles.entry_mouse_path,'String',pathName)
+        
+        if ~get(h.uihandles.checkbox_load_processed_data,'Value')
+            set(h.uihandles.button_FP_path,'enable','on')
+            set(h.uihandles.entry_FP_path,'String','','enable','on')
+            set(h.uihandles.checkbox_FP_single_file,'enable','on')
+            
+            set(h.uihandles.button_BG_path,'enable','on')
+            set(h.uihandles.entry_BG_path,'String','','enable','on')
+            set(h.uihandles.checkbox_BG_single_file,'enable','on')
+        end
+        set(h.uihandles.checkbox_load_processed_data,'enable','on')
+      end
+      h.check_load_button()
+    end
+    
+    function entry_mouse_path_Callback(h, hObject, eventdata)
+        
+      enable_bool = 'off';
+      
+      if exist(get(h.uihandles.entry_mouse_path,'String'),'dir')
+        if ~get(h.uihandles.checkbox_load_processed_data,'Value')
+          enable_bool = 'on';
+        end
+      end
+      
+      set(h.uihandles.button_FP_path,'enable',enable_bool)
+      set(h.uihandles.entry_FP_path,'enable',enable_bool)
+      set(h.uihandles.checkbox_FP_single_file,'enable',enable_bool)
+      
+      set(h.uihandles.button_BG_path,'enable',enable_bool)
+      set(h.uihandles.entry_BG_path,'enable',enable_bool)
+      set(h.uihandles.checkbox_BG_single_file,'enable',enable_bool)
+      
+      set(h.uihandles.checkbox_load_processed_data,'enable',enable_bool)
+      h.check_load_button()
+    end
+    
+    % --- Executes on button press in checkbox_load_processed_data.
+    function checkbox_load_processed_data_Callback(h, hObject, eventdata)
+      
+      enable_bool = 'off';
+      if get(h.uihandles.checkbox_load_processed_data,'Value')
+        enable_bool = 'off';
+      end
+      set(h.uihandles.button_FP_path,'enable',enable_bool)
+      set(h.uihandles.entry_FP_path,'String','','enable',enable_bool)
+      set(h.uihandles.button_FP_field,'enable',enable_bool)
+      set(h.uihandles.entry_FP_field,'String','')
+      set(h.uihandles.checkbox_FP_single_file,'enable',enable_bool)
+      
+      set(h.uihandles.button_BG_path,'enable',enable_bool)
+      set(h.uihandles.entry_BG_path,'String','','enable',enable_bool)
+      set(h.uihandles.button_BG_field,'enable',enable_bool)
+      set(h.uihandles.entry_BG_field,'String','')
+      set(h.uihandles.checkbox_BG_single_file,'enable',enable_bool)
+      h.check_load_button()
+    end
+    
+    
+%% -------------------------  footprints -------------------------- %%
+
+    % --- Executes on button press in button_mouse_path.
+    function button_FP_path_Callback(h, hObject, eventdata)
+      
+      pathSearch = get(h.uihandles.entry_mouse_path,'String');
+      [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose footprint file');
+      
+      if ischar(pathName)
+        pathTotal = pathcat(pathFolder,pathName);
+        if get(h.uihandles.checkbox_FP_single_file,'Value')
+          set(h.uihandles.entry_FP_path,'String',erase(pathTotal,h.path.mouse))
+        else
+          set(h.uihandles.entry_FP_path,'String',pathName)
+        end
+        
+        mFile = matfile(pathTotal);
+        details = whos(mFile);
+        if length(details) == 1
+          set(h.uihandles.entry_FP_field,'String',details(1).name);
+          set(h.uihandles.button_FP_field,'enable','off')
+        else
+          set(h.uihandles.button_FP_field,'enable','on')
+        end
+      end
+      h.check_load_button()
+    end
+    
+    function entry_FP_path_Callback(h, hObject, eventdata)
+      
+      pathMouse = get(h.uihandles.entry_mouse_path,'String');
+      if get(h.uihandles.checkbox_FP_single_file,'Value')
+        pathTotal = pathcat(pathMouse,get(h.uihandles.entry_FP_path,'String'));
+      else
+        pathSession = dir(pathcat(pathMouse,'Session*'));
+        pathTotal = pathcat(pathMouse,pathSession(1).name,get(h.uihandles.entry_FP_path,'String'));
+      end
+      
+      if exist(pathTotal,'file')
+        enable_bool = 'on';
+      else
+        enable_bool = 'off';
+        uiwait(msgbox(sprintf('file "%s" does not exist',pathTotal)))
+      end
+      set(h.uihandles.button_FP_field,'enable',enable_bool)
+      h.check_load_button()
+    end
+    
+    function button_FP_field_Callback(h,hObject,eventdata)
+      
+      pathMouse = get(h.uihandles.entry_mouse_path,'String');
+      if get(h.uihandles.checkbox_FP_single_file,'Value')
+        pathTotal = pathcat(pathMouse,get(h.uihandles.entry_FP_path,'String'));
+      else
+        pathSession = dir(pathcat(pathMouse,'Session*'));
+        pathTotal = pathcat(pathMouse,pathSession(1).name,get(h.uihandles.entry_FP_path,'String'));
+      end
+      
+      data_field = h.get_field(pathTotal);
+      set(h.uihandles.entry_FP_field,'String',data_field);
+      h.check_load_button()
+
+    end
+    
+    function checkbox_FP_single_file_Callback(h,hObject,eventdata)
+      set(h.uihandles.entry_FP_path,'String','')
+      set(h.uihandles.entry_FP_field,'String','')
+    end
+    
+    
+%% -------------------------  background -------------------------- %%
+
+  % --- Executes on button press in button_mouse_path.
+    function button_BG_path_Callback(h, hObject, eventdata)
+      pathSearch = pathcat(get(h.uihandles.entry_mouse_path,'String'),get(h.uihandles.entry_BG_path,'String'));
+      [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose background file');
+      
+      if ischar(pathName)
+        pathTotal = pathcat(pathFolder,pathName);
+        if get(h.uihandles.checkbox_BG_single_file,'Value')
+          set(h.uihandles.entry_BG_path,'String',erase(pathTotal,h.path.mouse))
+        else
+          set(h.uihandles.entry_BG_path,'String',pathName)
+        end
+        
+        mFile = matfile(pathTotal);
+        details = whos(mFile);
+        if length(details) == 1
+          set(h.uihandles.entry_BG_field,'String',details(i).name);
+          set(h.uihandles.button_BG_field,'enable','off')
+        else
+          set(h.uihandles.button_BG_field,'enable','on')
+        end
+      end
+      h.check_load_button()
+    end
+    
+    function entry_BG_path_Callback(h, hObject, eventdata)
+      
+      pathMouse = get(h.uihandles.entry_mouse_path,'String');
+      if get(h.uihandles.checkbox_BG_single_file,'Value')
+        pathTotal = pathcat(pathMouse,get(h.uihandles.entry_BG_path,'String'));
+      else
+        pathSession = dir(pathcat(pathMouse,'Session*'));
+        pathTotal = pathcat(pathMouse,pathSession(1).name,get(h.uihandles.entry_BG_path,'String'));
+      end
+      
+      if exist(pathTotal,'file')
+        enable_bool = 'on';
+      else
+        enable_bool = 'off';
+        uiwait(msgbox(sprintf('file "%s" does not exist',pathTotal)))
+      end
+      set(h.uihandles.button_BG_field,'enable',enable_bool)
+      h.check_load_button()
+    end
+    
+    function button_BG_field_Callback(h,hObject,eventdata)
+      
+      pathMouse = get(h.uihandles.entry_mouse_path,'String');
+      if get(h.uihandles.checkbox_BG_single_file,'Value')
+        pathTotal = pathcat(pathMouse,get(h.uihandles.entry_BG_path,'String'));
+      else
+        pathSession = dir(pathcat(pathMouse,'Session*'));
+        pathTotal = pathcat(pathMouse,pathSession(1).name,get(h.uihandles.entry_BG_path,'String'));
+      end
+      
+      data_field = h.get_field(pathTotal);
+      set(h.uihandles.entry_BG_field,'String',data_field);
+      h.check_load_button()
+    end
+    
+    function checkbox_BG_single_file_Callback(h,hObject,eventdata)
+      set(h.uihandles.entry_BG_path,'String','')
+      set(h.uihandles.entry_BG_field,'String','')
+    end
+    
+    
+    function [data_field] = get_field(h,path)
+      mFile = matfile(path);
+      details = whos(mFile);
+      fields = (['']);
+      field_string = (['']);
+      for i=1:length(details)
+        fields{i} = details(i).name;
+        str_dim = '';
+        for j=1:numel(details(i).size)
+          if j>1
+        str_dim = strcat(str_dim,'x');
+          end
+          str_dim = strcat(str_dim,sprintf('%d',details(i).size(j)));
+        end
+        field_string{i} = sprintf('%s (%s)',fields{i},str_dim);
+      end
+      str_output = select_field(field_string,'Select the field containing footprints');
+      if str_output > 0
+        data_field = fields{str_output};
+      else
+        data_field = '';
       end
     end
+    
+    function check_load_button(h)
+      
+      if exist(get(h.uihandles.entry_mouse_path,'String'),'file') && (get(h.uihandles.checkbox_load_processed_data,'Value') || ...
+            (~strcmp(get(h.uihandles.entry_BG_field,'String'),'') && ~strcmp(get(h.uihandles.entry_FP_field,'String'),'')))
+        set(h.uihandles.button_load,'enable','on')
+      else
+        set(h.uihandles.button_load,'enable','off')
+      end
+    end
+          
+          
+    
+    
+    % --- Executes on button press in button_load.
+    function button_load_Callback(h, hObject, eventdata)
+    % hObject    handle to button_load (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+      
+      tic
+      set(hObject,'enable','off')
+      
+      set(h.uihandles.entry_mouse_path,'enable','off')
+      set(h.uihandles.button_FP_path,'enable','off')
+      set(h.uihandles.entry_FP_path,'enable','off')
+      set(h.uihandles.button_FP_field,'enable','off')
+      set(h.uihandles.checkbox_FP_single_file,'enable','off')
+      set(h.uihandles.button_BG_path,'enable','off')
+      set(h.uihandles.button_BG_field,'enable','off')
+      set(h.uihandles.checkbox_BG_single_file,'enable','off')
+      
+      set(h.uihandles.checkbox_load_processed_data,'enable','off')
+      
+      h.set_paths()
+      
+      h.t.timer = timer(); % Put the timer object inside handles so that you can stop it later
+      h.t.timer.Period = 2;
+      h.t.timer.ExecutionMode = 'fixedRate';
+      h.t.timer.TimerFcn = @(~,event) h.update_time(); % Here is where you assign the callback function
+      
+      nSes = 15;
+      footprints = match_loadSessions(h.path,nSes,[get(h.uihandles.checkbox_FP_single_file,'Value') get(h.uihandles.checkbox_BG_single_file,'Value')]);
+      setappdata(0,'footprints',footprints)
+      
+      if ~exist(h.path.xdata,'file')
+        [xdata, histo, para] = match_analyzeData(footprints,footprints.data.nSes,12);      %% calculate distances and footprint correlation
+        [model,histo] = match_buildModel(xdata,histo,para,footprints.data.nSes,h.path.mouse);
+      %    [ROC] = estimate_model_accuracy(histo,model,para,pathMouse);
+        
+        %% and assigning probabilities to each (close) pair
+        xdata = match_assign_prob(xdata,footprints.data,model,para,h.path.xdata);
+      else
+        load(h.path.xdata)
+      end
+      setappdata(0,'xdata',xdata)
+      
+      bool_ld = get(h.uihandles.checkbox_load_processed_data,'Value') && exist(h.path.results,'file');
+      if bool_ld
+        ld_data = load(h.path.results);
+        clusters = ld_data.clusters_sv;
+        status = ld_data.status;
+      else
+        real_matching(footprints.data,0.5);
+        clusters = getappdata(0,'clusters');
+        status = [];
+      end
       
       
+      %%% setup of prototype structures after number of clusters is known
+      nCluster = length(clusters);
+      nSes = footprints.data.nSes;
+      
+      for obj = h.c_disp.c
+        set(obj.slider_cluster_ID,'Min',0,'Max',nCluster,'Value',0,'SliderStep',[1/nCluster, 10/nCluster])
+      end
+      
+      %% setup of data structure
+      h.data = struct('nCluster',nCluster,'nSes',nSes,'imSize',footprints.data.imSize,...
+                      'session',struct('shift',cell(nSes,1),'rotation',cell(nSes,1),'nROI',cell(nSes,1),...
+                                       'ROI',struct('cluster_ID',[])),...
+                      'ct',zeros(nCluster,1),'score',zeros(nCluster,1),...
+                      'cluster_centroids',[]);
+      
+      %% setup of status structure
+      h.status = struct('save',struct('footprints',false,'xdata',false),...
+                        'manipulation_now',struct('type',[],'bool',false,'s',[],'idx',[]),...
+                        'manipulate_ct',0,...
+                        'current_window',NaN,...
+                        'picked',struct('markROIs',[],'list',[]),'mark','',...
+                        'plotted',false(nCluster,1),...
+                        'processed',false(nCluster,1),'active',true(nCluster,1),'deleted',false(nCluster,1),...
+                        'multiROI',false(nCluster,1),'polyROI',false(nCluster,1),...
+                        'unsure',false(nCluster,1),'manipulated',false(nCluster,1),...
+                        'session',struct('manipulated',cell(nSes,1),'deleted',cell(nSes,1),...
+                                         'visible',cell(nSes,1)));
+      
+      for s = 1:nSes
+        h.data.session(s).shift = footprints.data.session(s).shift;
+        h.data.session(s).rotation = footprints.data.session(s).rotation;
+        h.data.session(s).nROI = footprints.data.session(s).nROI;
+        
+        for n = 1:h.data.session(s).nROI
+          h.data.session(s).ROI(n).cluster_ID = [];
+        end
+        
+        if bool_ld
+          h.status.session(s).manipulated = 1*status.session(s).manipulated;
+          h.status.session(s).deleted = status.session(s).deleted;
+          
+          h.status.session(s).manipulation = status.session(s).manipulation;
+        else
+          h.status.session(s).manipulated = zeros(h.data.session(s).nROI,1);
+          h.status.session(s).deleted = false(h.data.session(s).nROI,1);
+          h.status.session(s).manipulation = struct('pre',{},'post',{},'prototype',{},'type',{},'processed',{},'undone',{});
+        end
+        h.status.session(s).visible = true;
+      end
+      
+      if bool_ld
+        h.status.processed = status.processed;
+        h.status.unsure = status.unsure;
+        h.status.deleted = status.deleted;
+        
+        h.status.manipulation = status.manipulation;
+        h.status.manipulate_ct = status.manipulate_ct;
+        h.t.offset = status.time;
+      else
+        h.status.manipulation = struct('ID',{});
+        h.status.manipulate_ct = 0;
+        h.t.offset = 0;
+      end
+      
+      %%% processing input from "clusters" structure (from clustering or loading)
+      h.wbar.handle = waitbar(0,'Loading and processing clusters...');
+      h.wbar.status = true;
+      h.wbar.overall = nCluster;
+      h.wbar.ct = 0;
+      
+      h.clusters = cluster_class(nCluster,1:nCluster,h,clusters,status,footprints,xdata);
+      h.data.cluster_centroids = cat(1,h.clusters.centroid);
+      h.data.listener = addlistener(h.clusters,'emptyCluster',@h.emptyCluster);   %% triggers, when cluster becomes empty
+      
+      for c = 1:nCluster
+        for s = 1:nSes
+          for n = h.clusters(c).session(s).list
+            h.data.session(s).ROI(n).cluster_ID = cat(2,h.data.session(s).ROI(n).cluster_ID,c);
+            
+          end
+        end
+      end
+      for c = 1:nCluster
+        h.clusters(c).DUF_cluster_status(h)
+        h.update_arrays(c)
+      end
+      
+      h.wbar.ct = 0;
+      h.init_plot();
+      
+      ct = 0;
+      for c = 1:nCluster
+        x_pos = h.clusters(c).centroid(2);
+        y_pos = h.clusters(c).centroid(1);
+        border_prox = min(min(y_pos-1,h.data.imSize(1)-y_pos),min(x_pos-1,h.data.imSize(2)-x_pos));
+        if border_prox < 5
+            ct = ct + 1;
+            h.emptyCluster(h.clusters(c));
+        end
+      end
+      disp(sprintf('removed: %d',ct))
+      
+      h.update_table()
+      
+      close(h.wbar.handle)
+      h.wbar.status = false;
+      
+      h.DUF_process_info()
+      
+      uiwait(msgbox('loading of data processed'))
+      
+      set(h.uihandles.button_toggle_time,'Visible','on')
+      
+      h.t.start = tic;
+      start(h.t.timer)
+      
+      toc
+    end
+    
+%% -------------------------- save functionality --------------------------------%%
+    
     % --- Executes on button press in button_save.
     function button_save_Callback(h, hObject, eventdata)
     % hObject    handle to button_save (see GCBO)
@@ -1227,9 +1505,6 @@ classdef ROI_matching < handle
         clusters_sv(c).ID = h.clusters(c).ID;
         clusters_sv(c).nSes = h.clusters(c).nSes;
         
-%          clusters_sv(c).stats.ct = h.clusters(c).stats.ct;
-%          clusters_sv(c).stats.score = h.clusters(c).stats.score;
-        
         for s = 1:h.data.nSes
           clusters_sv(c).session(s).list = h.clusters(c).session(s).list;
           for i = 1:length(h.clusters(c).session(s).list)
@@ -1259,9 +1534,13 @@ classdef ROI_matching < handle
       uiwait(msgbox(sprintf('data saved @ %s',h.path.results)))
       h.button_toggle_time_Callback([],[])
     end
-      
-      
-      
+    
+    
+%%% ------------------------------------- something else ------------------------------------- %%%
+    
+    
+    
+    
     % --- Executes on button press in button_process_marked.
     function button_process_marked_Callback(hObject, eventdata, handles)
     % hObject    handle to button_process_marked (see GCBO)
@@ -1610,8 +1889,11 @@ classdef ROI_matching < handle
       cluster_ID = [];
       for j = 1:length(h.status.session(s).manipulation(idx).post)
         n = h.status.session(s).manipulation(idx).post(j).ID(2);
-        
-        cluster_ID = [cluster_ID, h.data.session(s).ROI(n).cluster_ID];
+        try
+          cluster_ID = [cluster_ID, h.data.session(s).ROI(n).cluster_ID];
+        catch
+          h.data.session(s).ROI(n).cluster_ID = [];
+        end
         h.remove_ROI(s,n)
       end
       
@@ -2144,8 +2426,8 @@ classdef ROI_matching < handle
           
           zlabel(obj.ax_ROI_display,'session')
           
-%            xlim(obj.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
-%            ylim(obj.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
+          xlim(obj.ax_ROI_display,[0 x_lims(2)-x_lims(1)])
+          ylim(obj.ax_ROI_display,[0 y_lims(2)-y_lims(1)])
         else
           rotate3d(obj.ax_ROI_display,'off')
           set(h.uihandles.checkbox_rotate3d,'Value',0)

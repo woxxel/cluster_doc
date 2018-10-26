@@ -1,12 +1,12 @@
 
 
-function footprints = match_loadSessions(pathMouse,nSes)
+function footprints = match_loadSessions(paths,nSes,single_file)
     
-    savePath = pathcat(pathMouse,'footprints.mat');
+    savePath = pathcat(paths.mouse,'footprints.mat');
     
     if ~exist(savePath,'file')
       tic
-      pathSessions = dir(pathcat(pathMouse,'Session*'));
+      pathSessions = dir(pathcat(paths.mouse,'Session*'));
       if nargin==2 && ~isempty(nSes)
         nSes = min(nSes,length(pathSessions));
         pathSessions = pathSessions(1:nSes);
@@ -18,11 +18,13 @@ function footprints = match_loadSessions(pathMouse,nSes)
       rot_max = 1;
       rot = linspace(-rot_max,rot_max,10*rot_max+1);
       
-  %      mask(nSes) = struct('mask',[]);
-      
-      path_bg = pathcat(pathMouse,pathSessions(1).name,'reduced_MF1_LK1.mat');
-      loadDat0 = load(path_bg,'max_im');
-      bg_ref = loadDat0.max_im;
+%        if single_file(1)
+%          loadDat_bg = load(pathcat(paths.mouse,paths.background),paths.background_field);
+%          bg_ref = loadDat_bg
+%        else
+      loadDat_bg = load(pathcat(pathcat(paths.mouse,paths.background_folder),paths.background),paths.background_field);
+      bg_ref = loadDat_bg.(paths.background_field);
+%        end
       
       footprints = struct('session',struct);
       footprints.data = struct('session',struct,'nSes',nSes);
@@ -37,17 +39,17 @@ function footprints = match_loadSessions(pathMouse,nSes)
         disp(sprintf('loading %s',pathSessions(s).name))
         
         %% loading data
-        path_ROI = pathcat(pathMouse,pathSessions(s).name,'resultsCNMF_MF1_LK1.mat');
-        loadDat = load(path_ROI,'A2');
+        path_ROI = pathcat(paths.mouse,pathSessions(s).name,paths.footprints);
+        loadDat_fp = load(path_ROI,paths.footprints_field);
         
-        nROI = size(loadDat.A2,2);
+        nROI = size(loadDat_fp.(paths.footprints_field),2);
         mask = false(nROI,1);
         %% preparing structure
         
         footprints.session(s).ROI = struct('A',[],'centroid',cell(nROI,1),'norm',[]);
         footprints.session(s).centroids = zeros(nROI,2);
         
-        A_tmp = reshape(full(loadDat.A2),footprints.data.imSize(1),footprints.data.imSize(2),nROI);
+        A_tmp = reshape(full(loadDat_fp.A2),footprints.data.imSize(1),footprints.data.imSize(2),nROI);
         
         if s == 1
           
@@ -56,9 +58,9 @@ function footprints = match_loadSessions(pathMouse,nSes)
           
         else
           
-          path_bg = pathcat(pathMouse,pathSessions(s).name,'reduced_MF1_LK1.mat');
-          loadDat = load(path_bg,'max_im');
-          bg_tmp = loadDat.max_im;
+          path_bg = pathcat(paths.mouse,pathSessions(s).name,paths.background);
+          loadDat_bg = load(path_bg,paths.background_field);
+          bg_tmp = loadDat_bg.(paths.background_field);
           
           max_C = 0;
           rot_tmp = -rot_max;
@@ -117,7 +119,7 @@ function footprints = match_loadSessions(pathMouse,nSes)
         nROIs = nROIs + footprints.data.session(s).nROI;
         
 %          if exist('C2','var')
-            saveCaPath = pathcat(pathMouse,pathSessions(s).name,'CaData.mat');
+            saveCaPath = pathcat(paths.mouse,pathSessions(s).name,'CaData.mat');
     %          if ~exist(saveCaPath,'file')
             load(path_ROI,'C2')
             C2(mask,:) = [];

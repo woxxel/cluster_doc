@@ -1,6 +1,6 @@
 
 
-function [movement] = get_movement(clusters,footprints,data)
+function [movement] = get_movement(clusters,footprints,data,animation,pathMouse)
     
     
     movement = struct('d_centr',zeros(data.nCluster,data.nSes,2)*NaN,'centr',zeros(data.nCluster,data.nSes,2)*NaN);
@@ -27,26 +27,45 @@ function [movement] = get_movement(clusters,footprints,data)
 %          end
     end
     
-    figure('position',[200 200 1500 1200]);
+    figure('position',[200 200 900 700]);
     hold on
-    mv_field = quiver(movement.centr(:,1,1),movement.centr(:,1,2),movement.d_centr(:,1,1),movement.d_centr(:,1,2),'k');
-    mv_field_old = quiver(movement.centr(:,1,1),movement.centr(:,1,2),movement.d_centr(:,1,1),movement.d_centr(:,1,2),'r');
+    
     
     xlim([0,512])
     ylim([0,512])
     
-    s = 1
-    while true
-        mean_movement = nanmean(squeeze(movement.d_centr(:,s,:)));
-        pause(0.5)
-        if s < 15
-            set(mv_field,'xdata',movement.centr(:,s,2),'ydata',movement.centr(:,s,1),'udata',movement.d_centr(:,s+1,2),'vdata',movement.d_centr(:,s+1,1))
+    if animation
+        mv_field = quiver(movement.centr(:,1,1),movement.centr(:,1,2),movement.d_centr(:,1,1),movement.d_centr(:,1,2),'k');
+        mv_field_old = quiver(movement.centr(:,1,1),movement.centr(:,1,2),movement.d_centr(:,1,1),movement.d_centr(:,1,2),'r');
+        s=1;
+        while true
+            mean_movement = nanmean(squeeze(movement.d_centr(:,s,:)));
+            pause(0.5)
+            if s < 15
+                set(mv_field,'xdata',movement.centr(:,s,2),'ydata',movement.centr(:,s,1),'udata',movement.d_centr(:,s+1,2),'vdata',movement.d_centr(:,s+1,1))
+            end
+            if s>1
+                set(mv_field_old,'xdata',movement.centr(:,s-1,2),'ydata',movement.centr(:,s-1,1),'udata',movement.d_centr(:,s,2),'vdata',movement.d_centr(:,s,1))
+            end
+            s = mod(s,15)+1;
         end
-        if s>1
-            set(mv_field_old,'xdata',movement.centr(:,s-1,2),'ydata',movement.centr(:,s-1,1),'udata',movement.d_centr(:,s,2),'vdata',movement.d_centr(:,s,1))
+    else
+    
+        centr_start = zeros(data.nCluster,2);
+        for c = 1:data.nCluster
+            for s = 1:data.nSes
+                if length(clusters(c).session(s).list)
+                    centr_start(c,:) = footprints.session(s).centroids(clusters(c).session(s).list(1),:);
+                    break
+                end
+            end
         end
-        s = mod(s,15)+1;
+        quiver(centr_start(:,1),centr_start(:,2),nansum(movement.d_centr(:,:,1),2),nansum(movement.d_centr(:,:,2),2),'k');
+        
+        pathSv = pathcat(pathMouse,'Figures/ROI_movement.mat')
+        print(pathSv,'-dpng','-r300')
     end
+    
     
 end
 
