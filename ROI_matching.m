@@ -1128,8 +1128,9 @@ classdef ROI_matching < handle
     function button_FP_path_Callback(h, hObject, eventdata)
       
       pathSearch = get(h.uihandles.entry_mouse_path,'String');
-      [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose footprint file');
-      
+      % [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose footprint file');
+      [pathName,pathFolder] = uigetfile({'*.hdf5';'*.mat';'*.*'},'Choose footprint file',pathSearch);
+
       if ischar(pathName)
         pathTotal = pathcat(pathFolder,pathName);
         if get(h.uihandles.checkbox_FP_single_file,'Value')
@@ -1138,10 +1139,10 @@ classdef ROI_matching < handle
           set(h.uihandles.entry_FP_path,'String',pathName)
         end
         
-        mFile = matfile(pathTotal);
-        details = whos(mFile);
-        if length(details) == 1
-          set(h.uihandles.entry_FP_field,'String',details(1).name);
+        data_field = h.get_field(pathTotal);
+
+        if length(data_field) == 1
+          set(h.uihandles.entry_FP_field,'String',data_field);
           set(h.uihandles.button_FP_field,'enable','off')
         else
           set(h.uihandles.button_FP_field,'enable','on')
@@ -1197,7 +1198,8 @@ classdef ROI_matching < handle
   % --- Executes on button press in button_mouse_path.
     function button_BG_path_Callback(h, hObject, eventdata)
       pathSearch = pathcat(get(h.uihandles.entry_mouse_path,'String'),get(h.uihandles.entry_BG_path,'String'));
-      [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose background file');
+      % [pathName,pathFolder] = uigetfile(pathcat(pathSearch,'*.mat'),'Choose background file');
+      [pathName,pathFolder] = uigetfile({'*.hdf5';'*.mat';'*.*'},'Choose background file',pathSearch);
       
       if ischar(pathName)
         pathTotal = pathcat(pathFolder,pathName);
@@ -1207,10 +1209,9 @@ classdef ROI_matching < handle
           set(h.uihandles.entry_BG_path,'String',pathName)
         end
         
-        mFile = matfile(pathTotal);
-        details = whos(mFile);
-        if length(details) == 1
-          set(h.uihandles.entry_BG_field,'String',details(i).name);
+        data_field = h.get_field(pathTotal);
+        if length(data_field) == 1
+          set(h.uihandles.entry_BG_field,'String',data_field);
           set(h.uihandles.button_BG_field,'enable','off')
         else
           set(h.uihandles.button_BG_field,'enable','on')
@@ -1261,21 +1262,57 @@ classdef ROI_matching < handle
     
     
     function [data_field] = get_field(h,path)
-      mFile = matfile(path);
-      details = whos(mFile);
+
+      [~,~,ext] = fileparts(path)
       fields = (['']);
       field_string = (['']);
-      for i=1:length(details)
-        fields{i} = details(i).name;
-        str_dim = '';
-        for j=1:numel(details(i).size)
-          if j>1
-        str_dim = strcat(str_dim,'x');
+      if strcmp(ext,'.mat')
+        mFile = matfile(path);
+        details = whos(mFile);
+        for i=1:length(details)
+          fields{i} = details(i).name;
+          str_dim = '';
+          for j=1:numel(details(i).size)
+            if j>1
+              str_dim = strcat(str_dim,'x');
+            end
+            str_dim = strcat(str_dim,sprintf('%d',details(i).size(j)));
           end
-          str_dim = strcat(str_dim,sprintf('%d',details(i).size(j)));
+          field_string{i} = sprintf('%s (%s)',fields{i},str_dim);
         end
-        field_string{i} = sprintf('%s (%s)',fields{i},str_dim);
+      elseif strcmp(ext,'.hdf5')
+        fileInfo = h5info(path);
+        
+        data = fileInfo.Datasets
+        for i=1:length(data)
+          fields{i} = data(i).Name;
+          str_dim = '';
+          for j=1:numel(data(i).Dataspace.Size)
+            if j>1
+              str_dim = strcat(str_dim,'x');
+            end
+            str_dim = strcat(str_dim,sprintf('%d',data(i).Dataspace.Size(j)));
+          end
+          field_string{i} = sprintf('%s (%s)',fields{i},str_dim);
+        end
+
+        data = fileInfo.Groups
+        for i=1:length(data)
+          fields{i} = data(i).Name(2:end);
+          str_dim = '';
+
+          data_shape = h5read(path,strcat(data(i).Name,'/shape'));
+          for j=1:numel(data_shape)
+            if j>1
+              str_dim = strcat(str_dim,'x');
+            end
+            str_dim = strcat(str_dim,sprintf('%d',data_shape(j)));
+          end
+          field_string{i} = sprintf('%s (%s)',fields{i},str_dim);
+        end
       end
+
+
       str_output = select_field(field_string,'Select the field containing footprints');
       if str_output > 0
         data_field = fields{str_output};
@@ -2187,7 +2224,9 @@ classdef ROI_matching < handle
       
     function init_plot(h)
       %%% initial plotting of all clusters
-      load(pathcat(h.path.mouse,'Session01/reduced_MF1_LK1.mat'),'max_im')
+      max_im = h5read(pathcat(h.path.mouse,'Session02/OnACID_results.hdf5'),'/Cn');
+
+      % load(pathcat(h.path.mouse,'Session01/reduced_MF1_LK1.mat'),'max_im')
       imagesc(h.uihandles.ax_cluster_overview,max_im,'Hittest','off')
       colormap(h.uihandles.ax_cluster_overview,'gray')
       

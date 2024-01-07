@@ -22,9 +22,14 @@ function footprints = match_loadSessions(paths,nSes,single_file)
 %          loadDat_bg = load(pathcat(paths.mouse,paths.background),paths.background_field);
 %          bg_ref = loadDat_bg
 %        else
-      loadDat_bg = load(pathcat(pathcat(paths.mouse,paths.background_folder),paths.background),paths.background_field);
-      bg_ref = loadDat_bg.(paths.background_field);
-%        end
+      path_background = pathcat(pathcat(paths.mouse,paths.background_folder),paths.background)
+      [~,~,ext] = fileparts(path_background)
+      if strcmp(ext,'.mat')
+        loadDat_bg = load(path_background,paths.background_field);
+        bg_ref = loadDat_bg.(paths.background_field);
+      elseif strcmp(ext,'.hdf5')
+        bg_ref = h5read(path_background,strcat('/',paths.background_field));
+      end
       
       footprints = struct('session',struct);
       footprints.data = struct('session',struct,'nSes',nSes);
@@ -40,16 +45,36 @@ function footprints = match_loadSessions(paths,nSes,single_file)
         
         %% loading data
         path_ROI = pathcat(paths.mouse,pathSessions(s).name,paths.footprints);
-        loadDat_fp = load(path_ROI,paths.footprints_field);
-        
-        nROI = size(loadDat_fp.(paths.footprints_field),2);
+
+        [~,~,ext] = fileparts(paths.footprints);
+
+        if strcmp(ext,'.mat')
+
+          loadDat_fp = load(path_ROI,paths.footprints_field);
+          A_tmp = reshape(full(loadDat_fp.(paths.footprints_field)),footprints.data.imSize(1),footprints.data.imSize(2),nROI);
+          nROI = size(loadDat_fp.(paths.footprints_field),2);
+          
+        elseif strcmp(ext,'.hdf5')
+          A_indptr = h5read(path_ROI,'/A/indptr');
+          A_indices = h5read(path_ROI,'/A/indices');
+          A_data = h5read(path_ROI,'/A/data');
+          A_shape = h5read(path_ROI,'/A/shape');
+          
+          A_tmp = zeros(transpose(A_shape));
+          nROI = A_shape(2);
+          for i=1:nROI-1;
+            idx = A_indices(A_indptr(i)+1:A_indptr(i+1)+1)+1;
+            A_tmp(idx,i) = A_data(A_indptr(i)+1:A_indptr(i+1)+1);
+          end
+          A_tmp = reshape(A_tmp,footprints.data.imSize(1),footprints.data.imSize(2),nROI);
+        end
+
         mask = false(nROI,1);
         %% preparing structure
         
         footprints.session(s).ROI = struct('A',[],'centroid',cell(nROI,1),'norm',[]);
         footprints.session(s).centroids = zeros(nROI,2);
         
-        A_tmp = reshape(full(loadDat_fp.A2),footprints.data.imSize(1),footprints.data.imSize(2),nROI);
         
         if s == 1
           
@@ -58,9 +83,14 @@ function footprints = match_loadSessions(paths,nSes,single_file)
           
         else
           
-          path_bg = pathcat(paths.mouse,pathSessions(s).name,paths.background);
-          loadDat_bg = load(path_bg,paths.background_field);
-          bg_tmp = loadDat_bg.(paths.background_field);
+          path_background = pathcat(paths.mouse,pathSessions(s).name,paths.background);
+          [~,~,ext] = fileparts(path_background);
+          if strcmp(ext,'.mat')
+            loadDat_bg = load(path_background,paths.background_field);
+            bg_tmp = loadDat_bg.(paths.background_field);
+          elseif strcmp(ext,'.hdf5')
+            bg_tmp = h5read(path_background,strcat('/',paths.background_field));
+          end
           
           max_C = 0;
           rot_tmp = -rot_max;
@@ -100,6 +130,12 @@ function footprints = match_loadSessions(paths,nSes,single_file)
           footprints.session(s).ROI(n).A = sparse(A_tmp(:,:,n)/sum(sum(A_tmp(:,:,n))));
           
           A_tmp_norm = sparse(footprints.session(s).ROI(n).A/sum(footprints.session(s).ROI(n).A(:)));
+          % disp('bla')
+          % footprints.data.imSize
+          % size(A_tmp_norm)
+
+          
+          
           footprints.session(s).ROI(n).centroid = [sum((1:footprints.data.imSize(1))*A_tmp_norm),sum(A_tmp_norm*(1:footprints.data.imSize(2))')];
           footprints.session(s).ROI(n).norm = norm(footprints.session(s).ROI(n).A(:));
           footprints.session(s).centroids(n,:) = footprints.session(s).ROI(n).centroid;
@@ -117,19 +153,21 @@ function footprints = match_loadSessions(paths,nSes,single_file)
         rm_ct = rm_ct + nnz(mask);
         footprints.data.session(s).nROI = nnz(~mask);
         nROIs = nROIs + footprints.data.session(s).nROI;
-        
-%          if exist('C2','var')
-            saveCaPath = pathcat(paths.mouse,pathSessions(s).name,'CaData.mat');
-    %          if ~exist(saveCaPath,'file')
-            load(path_ROI,'C2')
-            C2(mask,:) = [];
-    %          S2(mask,:) = [];
-            save(saveCaPath,'C2','-v7.3')
-            disp(sprintf('saved CaData @ %s',saveCaPath))
-            clear C2
-            clear S2
-%          end
-%          end
+   
+        %% what is this?? reactivate if needed
+
+% %          if exist('C2','var')
+%             saveCaPath = pathcat(paths.mouse,pathSessions(s).name,'CaData.mat');
+%     %          if ~exist(saveCaPath,'file')
+%             load(path_ROI,'C')
+%             C(mask,:) = [];
+%     %          S2(mask,:) = [];
+%             save(saveCaPath,'C','-v7.3')
+%             disp(sprintf('saved CaData @ %s',saveCaPath))
+%             clear C
+%             clear S
+% %          end
+% %          end
         
       end
       
